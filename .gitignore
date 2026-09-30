@@ -6,4 +6,5 @@ uploads/
 .local/
 output/
 test-results/
+.playwright-mcp/
 *.log
