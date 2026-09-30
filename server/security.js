@@ -19,14 +19,13 @@ export function csrf(req, res, next) {
   if (
     !supplied ||
     !expected ||
+    !/^[a-f0-9]{64}$/.test(supplied) ||
     supplied.length !== expected.length ||
     !timingSafeEqual(Buffer.from(supplied), Buffer.from(expected))
   ) {
-    return res
-      .status(403)
-      .json({
-        error: "Сессия формы истекла. Обновите страницу и повторите действие.",
-      });
+    return res.status(403).json({
+      error: "Сессия формы истекла. Обновите страницу и повторите действие.",
+    });
   }
   next();
 }

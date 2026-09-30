@@ -53,12 +53,10 @@ export function authRouter() {
       ).rows[0];
     } catch (err) {
       if (err.code === "23505")
-        return res
-          .status(409)
-          .json({
-            error: "Этот email уже зарегистрирован",
-            fields: { email: "Этот email уже зарегистрирован" },
-          });
+        return res.status(409).json({
+          error: "Этот email уже зарегистрирован",
+          fields: { email: "Этот email уже зарегистрирован" },
+        });
       throw err;
     }
     await startSession(req, row.id);

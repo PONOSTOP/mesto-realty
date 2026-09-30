@@ -1,4 +1,16 @@
 export const state = { user: null, csrfToken: "" };
+export function safeReturnPath(next, origin = location.origin) {
+  if (typeof next !== "string" || !next.startsWith("/") || next.includes("\\"))
+    return "/account";
+  try {
+    const url = new URL(next, origin);
+    return url.origin === origin
+      ? url.pathname + url.search + url.hash
+      : "/account";
+  } catch {
+    return "/account";
+  }
+}
 export const esc = (v) =>
   String(v ?? "").replace(
     /[&<>"']/g,
@@ -82,13 +94,15 @@ export const select = (name, label, options, value = "") =>
   `<label class="field">${label}<select name="${name}">${Object.entries(options)
     .map(
       ([k, v]) =>
-        `<option value="${esc(k)}" ${String(value) === k ? "selected" : ""}>${esc(v)}</option>`,
+        `<option value="${esc(k)}" ${String(value ?? "") === k ? "selected" : ""}>${esc(v)}</option>`,
     )
     .join(
       "",
     )}</select><span class="field-error" data-error="${name}"></span></label>`;
 export function errors(form, error) {
-  const box = form.querySelector(".form-error");
+  const box =
+    form.querySelector(":scope > .form-error") ||
+    form.querySelector(".form-error");
   if (box) {
     box.textContent = error.message;
     box.focus();

@@ -57,10 +57,33 @@ after(async () => {
   ]);
   instance.close();
   await pool.end();
-  await rm(process.env.UPLOAD_DIR, { recursive: true, force: true });
+  const cleanupDir = path.resolve(process.env.UPLOAD_DIR);
+  if (
+    path.dirname(cleanupDir) !== path.resolve(os.tmpdir()) ||
+    !path.basename(cleanupDir).startsWith("mesto-test-")
+  )
+    throw new Error("Unsafe test cleanup path");
+  await rm(cleanupDir, { recursive: true, force: true });
 });
 
 test("full persisted lifecycle, ownership, CSRF, uploads and public privacy", async (t) => {
+  await t.test(
+    "malformed CSRF and foreign origins return 403 without crashing",
+    async () => {
+      const session = await owner.get("/api/auth/session");
+      await owner
+        .post("/api/auth/login")
+        .set("X-CSRF-Token", "é".repeat(64))
+        .send({})
+        .expect(403);
+      await owner
+        .post("/api/auth/login")
+        .set("X-CSRF-Token", session.body.csrfToken)
+        .set("Origin", "https://untrusted.example")
+        .send({})
+        .expect(403);
+    },
+  );
   await t.test(
     "CSRF blocks registration, valid register sets HttpOnly session",
     async () => {
@@ -295,6 +318,37 @@ test("full persisted lifecycle, ownership, CSRF, uploads and public privacy", as
         (await owner.get("/api/profile")).body.user.avatar,
         /^\/media\//,
       );
+    },
+  );
+  await t.test(
+    "related cards preserve the current user favorite state",
+    async () => {
+      const created = await owner
+        .post("/api/properties")
+        .set("X-CSRF-Token", token)
+        .send({ ...property, title: "Второй объект владельца" })
+        .expect(201);
+      const secondId = created.body.property.id;
+      await owner
+        .post(`/api/properties/${secondId}/images`)
+        .set("X-CSRF-Token", token)
+        .attach("images", png, "second.png")
+        .expect(201);
+      await owner
+        .patch(`/api/properties/${secondId}`)
+        .set("X-CSRF-Token", token)
+        .send({ status: "published" })
+        .expect(200);
+      const detail = await owner.get(`/api/properties/${secondId}`).expect(200);
+      assert.equal(
+        detail.body.otherProperties.find((p) => p.id === propertyId)
+          ?.isFavorite,
+        true,
+      );
+      await owner
+        .delete(`/api/properties/${secondId}`)
+        .set("X-CSRF-Token", token)
+        .expect(204);
     },
   );
   await t.test(

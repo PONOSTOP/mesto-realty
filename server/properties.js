@@ -146,8 +146,8 @@ export function propertiesRouter() {
     ).rows.map(imageView);
     const others = (
       await pool.query(
-        `SELECT ${publicColumns},${imageColumns} FROM properties p WHERE p.owner_id=$1 AND p.id<>$2 AND p.status='published' ORDER BY p.created_at DESC,p.id DESC LIMIT 3`,
-        [row.owner_id, row.id],
+        `SELECT ${publicColumns},${imageColumns},EXISTS(SELECT 1 FROM favorites f WHERE f.property_id=p.id AND f.user_id=$3) AS is_favorite FROM properties p WHERE p.owner_id=$1 AND p.id<>$2 AND p.status='published' ORDER BY p.created_at DESC,p.id DESC LIMIT 3`,
+        [row.owner_id, row.id, req.session.userId || null],
       )
     ).rows.map(propertyView);
     res.json({
@@ -167,13 +167,10 @@ export function propertiesRouter() {
   router.post("/properties", requireAuth, async (req, res) => {
     const data = parse(propertySchema, req.body);
     if (data.status === "published")
-      return res
-        .status(422)
-        .json({
-          error:
-            "Сначала сохраните черновик и загрузите хотя бы одну фотографию",
-          fields: { images: "Добавьте фотографию" },
-        });
+      return res.status(422).json({
+        error: "Сначала сохраните черновик и загрузите хотя бы одну фотографию",
+        fields: { images: "Добавьте фотографию" },
+      });
     const values = [req.session.userId, ...propertyKeys.map((k) => data[k])];
     const row = (
       await pool.query(

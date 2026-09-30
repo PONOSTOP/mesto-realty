@@ -110,16 +110,15 @@ export function createApp() {
   );
   app.use((req, res) => res.status(404).json({ error: "Страница не найдена" }));
   app.use((err, req, res, next) => {
+    if (req.aborted || res.destroyed) return;
     if (res.headersSent) return next(err);
     if (err instanceof multer.MulterError)
-      return res
-        .status(err.code === "LIMIT_FILE_SIZE" ? 413 : 422)
-        .json({
-          error:
-            err.code === "LIMIT_FILE_SIZE"
-              ? "Файл должен быть не больше 8 МБ"
-              : "Не более 10 фотографий; используйте корректное поле загрузки",
-        });
+      return res.status(err.code === "LIMIT_FILE_SIZE" ? 413 : 422).json({
+        error:
+          err.code === "LIMIT_FILE_SIZE"
+            ? "Файл должен быть не больше 8 МБ"
+            : "Не более 10 фотографий; используйте корректное поле загрузки",
+      });
     if (err.type === "entity.too.large")
       return res.status(413).json({ error: "Слишком большой запрос" });
     if (err.type === "entity.parse.failed")
@@ -127,15 +126,13 @@ export function createApp() {
     const status = err.status >= 400 && err.status < 500 ? err.status : 500;
     if (status === 500)
       console.error("Request failed:", err.code || err.name, err.message);
-    res
-      .status(status)
-      .json({
-        error:
-          status === 500
-            ? "Сервис временно недоступен. Попробуйте позже."
-            : err.message,
-        ...(err.fields ? { fields: err.fields } : {}),
-      });
+    res.status(status).json({
+      error:
+        status === 500
+          ? "Сервис временно недоступен. Попробуйте позже."
+          : err.message,
+      ...(err.fields ? { fields: err.fields } : {}),
+    });
   });
   return { app, close: () => store.close() };
 }

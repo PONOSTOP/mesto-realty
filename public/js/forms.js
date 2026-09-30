@@ -13,11 +13,12 @@ import {
   authRequired,
   errors,
   busy,
+  safeReturnPath,
 } from "./core.js";
 const main = document.querySelector("#main");
 export function authPage(mode) {
   const register = mode === "register";
-  main.innerHTML = `<div class="auth-wrap"><div class="eyebrow">Добро пожаловать в Место</div><h1>${register ? "Начнём вашу историю" : "С возвращением"}</h1><p>${register ? "Создайте аккаунт, чтобы сохранять и публиковать объявления." : "Войдите, чтобы вернуться к вашим объявлениям."}</p><form id="auth-form" class="stack">${register ? field("name", "Ваше имя", "", 'required minlength="2" maxlength="80" autocomplete="name"') : ""}${field("email", "Электронная почта", "", 'required type="email" autocomplete="email" maxlength="254" placeholder="you@example.ru"')}${field("password", "Пароль", "", 'required type="password" minlength="10" maxlength="72" autocomplete="' + (register ? "new-password" : "current-password") + '"' + (register ? ' placeholder="Не менее 8 символов"' : ""))}${register ? field("confirmPassword", "Повторите пароль", "", 'required type="password" minlength="10" autocomplete="new-password"') : ""}<div class="form-error" tabindex="-1" role="alert"></div><button class="button" type="submit">${register ? "Создать аккаунт" : "Войти"}</button><p class="form-note">${register ? "Уже есть аккаунт?" : "Ещё нет аккаунта?"} <a href="/${register ? "login" : "register"}${location.search}">${register ? "Войти" : "Зарегистрироваться"}</a></p></form></div>`;
+  main.innerHTML = `<div class="auth-wrap"><div class="eyebrow">Добро пожаловать в Место</div><h1>${register ? "Начнём вашу историю" : "С возвращением"}</h1><p>${register ? "Создайте аккаунт, чтобы сохранять и публиковать объявления." : "Войдите, чтобы вернуться к вашим объявлениям."}</p><form id="auth-form" class="stack">${register ? field("name", "Ваше имя", "", 'required minlength="2" maxlength="80" autocomplete="name"') : ""}${field("email", "Электронная почта", "", 'required type="email" autocomplete="email" maxlength="254" placeholder="you@example.ru"')}${field("password", "Пароль", "", 'required type="password" minlength="10" maxlength="72" autocomplete="' + (register ? "new-password" : "current-password") + '"' + (register ? ' placeholder="Не менее 10 символов"' : ""))}${register ? field("confirmPassword", "Повторите пароль", "", 'required type="password" minlength="10" autocomplete="new-password"') : ""}<div class="form-error" tabindex="-1" role="alert"></div><button class="button" type="submit">${register ? "Создать аккаунт" : "Войти"}</button><p class="form-note">${register ? "Уже есть аккаунт?" : "Ещё нет аккаунта?"} <a href="/${register ? "login" : "register"}${location.search}">${register ? "Войти" : "Зарегистрироваться"}</a></p></form></div>`;
   document.querySelector("#auth-form").onsubmit = async (e) => {
     e.preventDefault();
     const form = e.currentTarget;
@@ -32,13 +33,7 @@ export function authPage(mode) {
       const data = await api("/auth/" + mode, { method: "POST", body: values });
       state.user = data.user;
       const next = new URLSearchParams(location.search).get("next");
-      location.href =
-        next &&
-        next.startsWith("/") &&
-        !next.startsWith("//") &&
-        !next.includes("\\")
-          ? next
-          : "/account";
+      location.href = safeReturnPath(next);
     } catch (error) {
       errors(form, error);
       busy(form, false);
@@ -63,13 +58,14 @@ export async function accountPage() {
       "",
     )}</nav><div id="account-content"><div class="loading">Загрузка…</div></div></div>`;
   document.querySelector("#logout").onclick = async (e) => {
-    e.currentTarget.disabled = true;
+    const button = e.currentTarget;
+    button.disabled = true;
     try {
       await api("/auth/logout", { method: "POST" });
       location.href = "/";
     } catch (error) {
       toast(error.message);
-      e.currentTarget.disabled = false;
+      button.disabled = false;
     }
   };
   const content = document.querySelector("#account-content");
@@ -192,9 +188,10 @@ export async function editorPage(id) {
       throw new Error("Вы можете редактировать только свои объявления.");
   }
   let propertyId = id;
+  let createOutcomeUnknown = false;
   let pending = [];
   let urls = [];
-  main.innerHTML = `<div class="container page"><div class="breadcrumb"><a href="/account">Личный кабинет</a> / ${id ? "Редактирование" : "Новое объявление"}</div><div class="page-intro"><h1>${id ? "Расскажите о вашем месте" : "У каждого места есть история"}</h1><p>${id ? "Обновите информацию и фотографии объявления." : "Добавьте недвижимость — поможем найти тех, кто её ищет."}</p></div><form id="editor" class="form-sheet"><section class="form-section"><h2>Основное</h2><div class="form-grid">${select("deal", "Тип сделки", { sale: "Продажа", rent: "Аренда" }, p.deal)}${select("category", "Тип недвижимости", categories, p.category)}<div class="full">${field("title", "Заголовок объявления", p.title, 'required minlength="5" maxlength="120" placeholder="Светлая квартира рядом с парком"')}</div>${field("price", "Цена, ₽", p.price, 'required type="number" min="1" max="999999999999" step="0.01"')}${field("area", "Площадь, м²", p.area, 'required type="number" min="0.01" max="99999999" step="0.01"')}${field("rooms", "Количество комнат", p.rooms, 'type="number" min="0" max="100" step="1"')}</div></section><section class="form-section"><h2>Расположение</h2><div class="form-grid">${field("city", "Город", p.city, 'required minlength="2" maxlength="120" placeholder="Москва"')}${field("district", "Район", p.district, 'maxlength="120" placeholder="Необязательно"')}<div class="full">${field("address", "Адрес", p.address, 'required minlength="5" maxlength="200" placeholder="Улица, номер дома"')}</div></div></section><section class="form-section"><h2>Фотографии</h2><div class="upload"><label class="field">Добавьте до 10 фотографий<input id="photos" type="file" accept="image/jpeg,image/png,image/webp" multiple></label><p class="muted">JPEG, PNG или WebP, до 8 МБ каждое. Первое фото станет обложкой. Для публикации нужно хотя бы одно фото.</p></div><div id="photo-previews" class="preview-grid"></div><p id="photo-error" class="form-error" role="alert"></p></section><section class="form-section"><h2>О недвижимости</h2><label class="field">Описание<textarea name="description" required minlength="20" maxlength="10000" placeholder="Расскажите о планировке, ремонте и о том, что рядом. Не менее 20 символов.">${esc(p.description)}</textarea><span class="field-error" data-error="description"></span></label></section><section class="form-section"><h2>Контакты</h2><div class="form-grid">${field("contactName", "Контактное лицо", p.contactName, 'required minlength="2" maxlength="80" autocomplete="name"')}${field("contactPhone", "Телефон", p.contactPhone, 'required type="tel" autocomplete="tel" placeholder="+7 900 000-00-00"')}</div></section><div class="form-error" tabindex="-1" role="alert"></div><p id="save-progress" class="muted" aria-live="polite"></p><div class="form-actions"><button type="submit" class="button" name="intent" value="published">${p.status === "published" ? "Сохранить и опубликовать" : "Опубликовать"}</button><button type="submit" class="button secondary" name="intent" value="draft">Сохранить черновик</button><a class="button secondary" href="/account">В кабинет</a></div></form></div>`;
+  main.innerHTML = `<div class="container page"><div class="breadcrumb"><a href="/account">Личный кабинет</a> / ${id ? "Редактирование" : "Новое объявление"}</div><div class="page-intro"><h1>${id ? "Расскажите о вашем месте" : "У каждого места есть история"}</h1><p>${id ? "Обновите информацию и фотографии объявления." : "Добавьте недвижимость — поможем найти тех, кто её ищет."}</p></div><form id="editor" class="form-sheet"><section class="form-section"><h2>Основное</h2><div class="form-grid">${select("deal", "Тип сделки", { sale: "Продажа", rent: "Аренда" }, p.deal)}${select("category", "Тип недвижимости", categories, p.category)}<div class="full">${field("title", "Заголовок объявления", p.title, 'required minlength="5" maxlength="120" placeholder="Светлая квартира рядом с парком"')}</div>${field("price", "Цена, ₽", p.price, 'required type="number" min="1" max="999999999999" step="0.01"')}${field("area", "Площадь, м²", p.area, 'required type="number" min="0.01" max="99999999" step="0.01"')}${field("rooms", "Количество комнат", p.rooms, 'type="number" min="0" max="100" step="1"')}</div></section><section class="form-section"><h2>Расположение</h2><div class="form-grid">${field("city", "Город", p.city, 'required minlength="2" maxlength="80" placeholder="Москва"')}${field("district", "Район", p.district, 'maxlength="100" placeholder="Необязательно"')}<div class="full">${field("address", "Адрес", p.address, 'required minlength="5" maxlength="200" placeholder="Улица, номер дома"')}</div></div></section><section class="form-section"><h2>Фотографии</h2><div class="upload"><label class="field">Добавьте до 10 фотографий<input id="photos" type="file" accept="image/jpeg,image/png,image/webp" multiple></label><p class="muted">JPEG, PNG или WebP, до 8 МБ каждое. Первое фото станет обложкой. Для публикации нужно хотя бы одно фото.</p></div><div id="photo-previews" class="preview-grid"></div><p id="photo-error" class="form-error" role="alert"></p></section><section class="form-section"><h2>О недвижимости</h2><label class="field">Описание<textarea name="description" required minlength="20" maxlength="10000" placeholder="Расскажите о планировке, ремонте и о том, что рядом. Не менее 20 символов.">${esc(p.description)}</textarea><span class="field-error" data-error="description"></span></label></section><section class="form-section"><h2>Контакты</h2><div class="form-grid">${field("contactName", "Контактное лицо", p.contactName, 'required minlength="2" maxlength="80" autocomplete="name"')}${field("contactPhone", "Телефон", p.contactPhone, 'required type="tel" autocomplete="tel" placeholder="+7 900 000-00-00"')}</div></section><div class="form-error" tabindex="-1" role="alert"></div><p id="save-progress" class="muted" aria-live="polite"></p><div class="form-actions"><button type="submit" class="button" name="intent" value="published">${p.status === "published" ? "Сохранить и опубликовать" : "Опубликовать"}</button><button type="submit" class="button secondary" name="intent" value="draft">Сохранить черновик</button><a class="button secondary" href="/account">В кабинет</a></div></form></div>`;
   const form = document.querySelector("#editor");
   const category = form.elements.category;
   const updateRooms = () => {
@@ -268,6 +265,8 @@ export async function editorPage(id) {
   };
   form.onsubmit = async (e) => {
     e.preventDefault();
+    if (createOutcomeUnknown || form.getAttribute("aria-busy") === "true")
+      return;
     const targetStatus = e.submitter?.value || "draft";
     const body = Object.fromEntries(new FormData(form));
     delete body.intent;
@@ -337,6 +336,11 @@ export async function editorPage(id) {
           ? "/property/" + encodeURIComponent(propertyId)
           : "/account";
     } catch (error) {
+      if (!propertyId && !error.status) {
+        createOutcomeUnknown = true;
+        error.message =
+          "Связь прервалась при создании объявления. Возможно, черновик уже сохранён. Откройте кабинет и проверьте свои объявления перед созданием нового. Повторное сохранение здесь отключено, чтобы не создать копию.";
+      }
       if (uploadStarted) {
         if (!error.status) {
           pending = [];
@@ -361,6 +365,12 @@ export async function editorPage(id) {
         : "";
       errors(form, error);
       busy(form, false);
+      if (createOutcomeUnknown) {
+        form
+          .querySelectorAll('button[type="submit"]')
+          .forEach((button) => (button.disabled = true));
+        return;
+      }
       form
         .querySelectorAll('input,select,textarea,button[type="button"]')
         .forEach((el) => (el.disabled = false));
