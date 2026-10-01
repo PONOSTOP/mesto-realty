@@ -17,6 +17,9 @@ import { uploadsRouter, serveMedia } from "./uploads.js";
 const publicDir = fileURLToPath(new URL("../public/", import.meta.url));
 export function createApp() {
   const app = express();
+
+  app.set("trust proxy", 1);
+  
   app.disable("x-powered-by");
   if (config.trustProxy) app.set("trust proxy", config.trustProxy);
   app.use(
