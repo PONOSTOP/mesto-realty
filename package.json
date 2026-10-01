@@ -9,7 +9,7 @@
   "scripts": {
     "setup": "node scripts/setup-env.js",
     "dev": "node --watch server/index.js",
-    "start": "node server/index.js",
+    "start": "npm run db:migrate && node server/index.js"
     "db:migrate": "node server/migrate.js",
     "db:seed": "node scripts/seed.js",
     "test": "node --test tests/validation.test.js tests/ui-security.test.js",
