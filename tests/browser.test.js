@@ -76,6 +76,45 @@ async function fillProperty(title = "Офис для проверки брауз
 }
 test("browser: account, listing lifecycle, responsiveness and recovery", async (t) => {
   let propertyUrl;
+  await t.test(
+    "page navigation animates content and respects reduced motion",
+    async () => {
+      await page.goto(base + "/");
+      await page.locator(".hero").waitFor();
+      const enterDuration = await page
+        .locator("#main > *")
+        .evaluate((element) => getComputedStyle(element).animationDuration);
+      assert.notEqual(enterDuration, "0s");
+      const leaving = await page.evaluate(() => {
+        document.querySelector('.main-nav a[href="/catalog"]').click();
+        return {
+          active: document.body.classList.contains("is-leaving"),
+          duration: getComputedStyle(document.body).animationDuration,
+        };
+      });
+      assert.deepEqual(leaving, { active: true, duration: "0.13s" });
+      await page.waitForURL("**/catalog");
+      await page.locator(".catalog-layout").waitFor();
+      assert.equal(await page.locator(".page-intro h1").count(), 1);
+
+      await page.emulateMedia({ reducedMotion: "reduce" });
+      await page.goto(base + "/login");
+      await page.locator("#auth-form").waitFor();
+      assert.equal(
+        await page
+          .locator("#main > *")
+          .evaluate((element) => getComputedStyle(element).animationDuration),
+        "0s",
+      );
+      const reducedMotionExit = await page.evaluate(() => {
+        document.querySelector('a[href="/register"]').click();
+        return document.body.classList.contains("is-leaving");
+      });
+      assert.equal(reducedMotionExit, false);
+      await page.waitForURL("**/register");
+      await page.emulateMedia({ reducedMotion: "no-preference" });
+    },
+  );
   await t.test("registration then logout and login", async () => {
     await page.goto(base + "/register");
     await page.getByLabel("Ваше имя").fill("Браузерный владелец");

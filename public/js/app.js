@@ -16,6 +16,7 @@ import {
   select,
   toast,
   authRequired,
+  navigate,
 } from "./core.js";
 import { authPage, accountPage, editorPage } from "./forms.js";
 const main = document.querySelector("#main");
@@ -71,7 +72,7 @@ async function catalog() {
   document.querySelector("#sort").onchange = (e) => {
     q.set("sort", e.target.value);
     q.delete("page");
-    location.href = "/catalog?" + q;
+    navigate("/catalog?" + q);
   };
   const data = await api("/properties?" + q);
   document.querySelector("#result-count").textContent =
@@ -164,8 +165,34 @@ document.addEventListener("submit", (e) => {
     e.preventDefault();
     const params = new URLSearchParams(new FormData(e.target));
     for (const [key, value] of [...params]) if (!value) params.delete(key);
-    location.href = "/catalog?" + params;
+    navigate("/catalog?" + params);
   }
+});
+document.addEventListener("click", (event) => {
+  const link =
+    event.target instanceof Element ? event.target.closest("a[href]") : null;
+  if (
+    !link ||
+    event.defaultPrevented ||
+    event.button !== 0 ||
+    event.metaKey ||
+    event.ctrlKey ||
+    event.shiftKey ||
+    event.altKey ||
+    link.hasAttribute("download") ||
+    (link.target && link.target !== "_self")
+  )
+    return;
+  const destination = new URL(link.href);
+  if (
+    destination.origin !== location.origin ||
+    (destination.pathname === location.pathname &&
+      destination.search === location.search &&
+      destination.hash)
+  )
+    return;
+  event.preventDefault();
+  navigate(destination.href);
 });
 try {
   const session = await api("/auth/session");

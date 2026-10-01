@@ -16,6 +16,7 @@ import {
   errors,
   busy,
   safeReturnPath,
+  navigate,
 } from "./core.js";
 const main = document.querySelector("#main");
 export function authPage(mode) {
@@ -35,7 +36,7 @@ export function authPage(mode) {
       const data = await api("/auth/" + mode, { method: "POST", body: values });
       state.user = data.user;
       const next = new URLSearchParams(location.search).get("next");
-      location.href = safeReturnPath(next);
+      navigate(safeReturnPath(next));
     } catch (error) {
       errors(form, error);
       busy(form, false);
@@ -64,7 +65,7 @@ export async function accountPage() {
     button.disabled = true;
     try {
       await api("/auth/logout", { method: "POST" });
-      location.href = "/";
+      navigate("/");
     } catch (error) {
       toast(error.message);
       button.disabled = false;
@@ -343,10 +344,11 @@ export async function editorPage(id) {
         method: "PATCH",
         body: { status: targetStatus },
       });
-      location.href =
+      navigate(
         targetStatus === "published"
           ? "/property/" + encodeURIComponent(propertyId)
-          : "/account";
+          : "/account",
+      );
     } catch (error) {
       if (!propertyId && !error.status) {
         createOutcomeUnknown = true;

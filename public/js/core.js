@@ -119,10 +119,21 @@ export function toast(message) {
   clearTimeout(toast.timer);
   toast.timer = setTimeout(() => el.classList.remove("show"), 4500);
 }
+let navigationTimer;
+export function navigate(url) {
+  if (matchMedia("(prefers-reduced-motion: reduce)").matches) {
+    location.assign(url);
+    return;
+  }
+  document.body.classList.add("is-leaving");
+  clearTimeout(navigationTimer);
+  navigationTimer = setTimeout(() => location.assign(url), 130);
+}
 export function authRequired() {
   if (state.user) return true;
-  location.href =
-    "/login?next=" + encodeURIComponent(location.pathname + location.search);
+  navigate(
+    "/login?next=" + encodeURIComponent(location.pathname + location.search),
+  );
   return false;
 }
 export const field = (name, label, value = "", attrs = "") =>
