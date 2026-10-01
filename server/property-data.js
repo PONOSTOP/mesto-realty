@@ -1,7 +1,7 @@
 import { pool } from "./db.js";
 
 // Only explicit public columns; contact_phone is read separately for owners/contact reveal.
-export const publicColumns = `p.id,p.owner_id,p.title,p.deal,p.category,p.city,p.district,p.address,p.price,p.area,p.rooms,p.description,p.contact_name,p.status,p.created_at,p.updated_at`;
+export const publicColumns = `p.id,p.owner_id,p.title,p.deal,p.category,p.city,p.district,p.address,p.price,p.area,p.building_class,p.floor,p.ceiling_height,p.power_kw,p.parking,p.tax,p.description,p.contact_name,p.status,p.created_at,p.updated_at`;
 export const imageColumns = `(SELECT filename FROM property_images WHERE property_id=p.id ORDER BY position,id LIMIT 1) AS cover,
   (SELECT count(*)::int FROM property_images WHERE property_id=p.id) AS image_count`;
 export function propertyView(row) {
@@ -16,7 +16,12 @@ export function propertyView(row) {
     address: row.address,
     price: row.price,
     area: row.area,
-    rooms: row.rooms,
+    buildingClass: row.building_class,
+    floor: row.floor,
+    ceilingHeight: row.ceiling_height,
+    powerKw: row.power_kw,
+    parking: row.parking,
+    tax: row.tax,
     description: row.description,
     contactName: row.contact_name,
     status: row.status,
@@ -63,7 +68,10 @@ export async function listProperties(
     ["deal", "deal", "="],
     ["category", "category", "="],
     ["owner", "owner_id", "="],
-    ["rooms", "rooms", "="],
+    ["buildingClass", "building_class", "="],
+    ["minCeilingHeight", "ceiling_height", ">="],
+    ["minPowerKw", "power_kw", ">="],
+    ["parking", "parking", "="],
     ["minPrice", "price", ">="],
     ["maxPrice", "price", "<="],
     ["minArea", "area", ">="],

@@ -23,8 +23,15 @@ export function profileRouter() {
     const data = parse(profileSchema, req.body);
     const row = (
       await pool.query(
-        `UPDATE users SET name=$1,phone=$2,bio=$3 WHERE id=$4 RETURNING ${userColumns}`,
-        [data.name, data.phone, data.bio, req.session.userId],
+        `UPDATE users SET name=$1,phone=$2,bio=$3,company=$4,business_role=$5 WHERE id=$6 RETURNING ${userColumns}`,
+        [
+          data.name,
+          data.phone,
+          data.bio,
+          data.company,
+          data.businessRole,
+          req.session.userId,
+        ],
       )
     ).rows[0];
     res.json({ user: privateUser(row) });

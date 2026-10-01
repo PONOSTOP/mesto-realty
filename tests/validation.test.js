@@ -8,16 +8,21 @@ import {
 } from "../server/validation.js";
 
 const valid = {
-  title: "Светлая квартира",
+  title: "Офис в деловом центре",
   deal: "sale",
-  category: "apartment",
+  category: "office",
   city: "Москва",
   district: "Хамовники",
   address: "Улица Льва Толстого, 10",
   price: 12500000,
   area: 55.5,
-  rooms: 2,
-  description: "Просторная квартира с большими окнами и отдельной кухней.",
+  buildingClass: "A",
+  floor: 5,
+  ceilingHeight: 3.6,
+  powerKw: 40,
+  parking: true,
+  tax: "included",
+  description: "Офисный блок с переговорной и выделенной серверной.",
   contactName: "Анна",
   contactPhone: "+7 (999) 123-45-67",
   status: "draft",
@@ -28,16 +33,50 @@ test("property accepts numeric values and normalizes phone", () => {
   assert.equal(result.area, 55.5);
   assert.equal(result.contactPhone, "+79991234567");
 });
-test("land does not need rooms; apartment does", () => {
+test("only six commercial categories are accepted and none needs rooms", () => {
+  for (const category of [
+    "office",
+    "retail",
+    "warehouse",
+    "industrial",
+    "free_purpose",
+    "commercial_land",
+  ])
+    assert.equal(
+      propertySchema.safeParse({ ...valid, category }).success,
+      true,
+      category,
+    );
+  for (const category of ["apartment", "house", "room", "land", "commercial"])
+    assert.equal(
+      propertySchema.safeParse({ ...valid, category }).success,
+      false,
+      category,
+    );
+  assert.equal("rooms" in propertySchema.parse(valid), false);
+});
+test("validates commercial specifications and search filters", () => {
+  const result = propertySchema.parse(valid);
+  assert.equal(result.buildingClass, "A");
+  assert.equal(result.ceilingHeight, 3.6);
+  assert.equal(result.parking, true);
+  for (const patch of [
+    { buildingClass: "luxury" },
+    { floor: 999 },
+    { ceilingHeight: -1 },
+    { powerKw: 0 },
+    { parking: "false" },
+    { tax: "free" },
+  ])
+    assert.equal(
+      propertySchema.safeParse({ ...valid, ...patch }).success,
+      false,
+    );
   assert.equal(
-    propertySchema.safeParse({ ...valid, category: "land", rooms: null })
-      .success,
-    true,
-  );
-  assert.equal(
-    propertySchema.safeParse({ ...valid, rooms: null }).success,
+    searchSchema.parse({ parking: "false", minCeilingHeight: "6" }).parking,
     false,
   );
+  assert.equal(searchSchema.safeParse({ rooms: 2 }).success, false);
 });
 test("reject invalid numbers and injected enum values", () => {
   for (const value of [-1, 0, NaN, Infinity, "abc", "", null]) {
@@ -95,5 +134,11 @@ test("profile allowlist strips protected keys", () => {
     email: "attacker@x.com",
     passwordHash: "anything",
   });
-  assert.deepEqual(Object.keys(result).sort(), ["bio", "name", "phone"]);
+  assert.deepEqual(Object.keys(result).sort(), [
+    "bio",
+    "businessRole",
+    "company",
+    "name",
+    "phone",
+  ]);
 });

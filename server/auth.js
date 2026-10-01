@@ -5,7 +5,8 @@ import { pool } from "./db.js";
 import { loginSchema, registrationSchema, parse } from "./validation.js";
 import { newToken, startSession } from "./security.js";
 
-export const userColumns = "id, name, email, phone, bio, avatar_filename";
+export const userColumns =
+  "id, name, email, phone, bio, avatar_filename, company, business_role";
 export function privateUser(row) {
   return row
     ? {
@@ -14,6 +15,8 @@ export function privateUser(row) {
         email: row.email,
         phone: row.phone,
         bio: row.bio,
+        company: row.company,
+        businessRole: row.business_role,
         avatar: row.avatar_filename ? `/media/${row.avatar_filename}` : null,
       }
     : null;
@@ -47,8 +50,8 @@ export function authRouter() {
     try {
       row = (
         await pool.query(
-          `INSERT INTO users(name,email,password_hash) VALUES($1,$2,$3) RETURNING ${userColumns}`,
-          [data.name, data.email, hash],
+          `INSERT INTO users(name,email,password_hash,company,business_role) VALUES($1,$2,$3,$4,$5) RETURNING ${userColumns}`,
+          [data.name, data.email, hash, data.company, data.businessRole],
         )
       ).rows[0];
     } catch (err) {

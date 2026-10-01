@@ -29,16 +29,21 @@ const unique = Date.now();
 const email = `owner-${unique}@example.com`;
 const password = "Correct-horse-123!";
 const property = {
-  title: `Квартира тест ${unique}`,
+  title: `Офис тест ${unique}`,
   deal: "sale",
-  category: "apartment",
+  category: "office",
   city: "Москва",
   district: "Хамовники",
   address: "Улица Льва Толстого, 10",
   price: 12345678,
   area: 62.5,
-  rooms: 2,
-  description: "Светлая квартира с большими окнами, рядом с парком и метро.",
+  buildingClass: "A",
+  floor: 8,
+  ceilingHeight: 3.8,
+  powerKw: 50,
+  parking: true,
+  tax: "included",
+  description: "Офис в бизнес-центре, переговорная и выделенная серверная.",
   contactName: "Владелец",
   contactPhone: "+79991234567",
   status: "draft",
@@ -152,6 +157,43 @@ test("full persisted lifecycle, ownership, CSRF, uploads and public privacy", as
     },
   );
   await t.test(
+    "B2B API rejects residential categories and persists commercial details",
+    async () => {
+      for (const category of [
+        "apartment",
+        "house",
+        "room",
+        "land",
+        "commercial",
+      ]) {
+        await owner
+          .post("/api/properties")
+          .set("X-CSRF-Token", token)
+          .send({ ...property, category })
+          .expect(422);
+        await request(app)
+          .get("/api/properties")
+          .query({ category })
+          .expect(422);
+      }
+      await owner
+        .patch(`/api/properties/${propertyId}`)
+        .set("X-CSRF-Token", token)
+        .send({ rooms: 3 })
+        .expect(422);
+      const data = (
+        await owner.get(`/api/properties/${propertyId}`).expect(200)
+      ).body.property;
+      assert.equal(data.buildingClass, "A");
+      assert.equal(data.floor, 8);
+      assert.equal(data.ceilingHeight, 3.8);
+      assert.equal(data.powerKw, 50);
+      assert.equal(data.parking, true);
+      assert.equal(data.tax, "included");
+      assert.equal("rooms" in data, false);
+    },
+  );
+  await t.test(
     "rejects fake/oversized uploads and re-encodes valid images",
     async () => {
       await owner
@@ -199,12 +241,15 @@ test("full persisted lifecycle, ownership, CSRF, uploads and public privacy", as
         .get("/api/properties")
         .query({
           q: "Хамовники",
-          category: "apartment",
+          category: "office",
           minPrice: 12345678,
           maxPrice: 12345678,
           minArea: 62,
           maxArea: 63,
-          rooms: 2,
+          buildingClass: "A",
+          minCeilingHeight: 3.5,
+          minPowerKw: 40,
+          parking: "true",
           sort: "price_asc",
           limit: 1,
         })
@@ -304,11 +349,21 @@ test("full persisted lifecycle, ownership, CSRF, uploads and public privacy", as
           name: "Новое имя",
           phone: "+79998887766",
           bio: "<script>alert(1)</script>",
+          company: "Тестовая коммерческая компания",
+          businessRole: "broker",
           email: "injected@example.com",
         })
         .expect(200);
       assert.equal(result.body.user.email, email);
       assert.equal(result.body.user.name, "Новое имя");
+      assert.equal(result.body.user.company, "Тестовая коммерческая компания");
+      assert.equal(result.body.user.businessRole, "broker");
+      const detail = (
+        await request(app).get(`/api/properties/${propertyId}`).expect(200)
+      ).body;
+      assert.equal(detail.owner.company, "Тестовая коммерческая компания");
+      assert.equal(detail.owner.businessRole, "broker");
+      assert.equal("email" in detail.owner, false);
       await owner
         .post("/api/profile/avatar")
         .set("X-CSRF-Token", token)
@@ -382,7 +437,7 @@ test("full persisted lifecycle, ownership, CSRF, uploads and public privacy", as
       await owner
         .patch(`/api/properties/${propertyId}`)
         .set("X-CSRF-Token", token)
-        .send({ price: 11000000, title: "Обновлённая квартира" })
+        .send({ price: 11000000, title: "Обновлённый офис" })
         .expect(200);
       assert.equal(
         (await request(app).get(`/api/properties/${propertyId}`)).body.property

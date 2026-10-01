@@ -29,7 +29,22 @@ const optionalNumber = (schema) =>
     (v) => (v === "" || v === null || v === undefined ? undefined : v),
     schema.optional(),
   );
+export const commercialCategories = [
+  "office",
+  "retail",
+  "warehouse",
+  "industrial",
+  "free_purpose",
+  "commercial_land",
+];
+const companyFields = {
+  company: text(0, 120, "Компания").default(""),
+  businessRole: z
+    .enum(["owner", "broker", "tenant"], { error: "Выберите роль на площадке" })
+    .default("owner"),
+};
 export const registrationSchema = z.object({
+  ...companyFields,
   name: text(2, 80, "Имя"),
   email: z
     .string()
@@ -55,6 +70,7 @@ export const loginSchema = z.object({
   password: z.string().min(1, "Введите пароль").max(200),
 });
 export const profileSchema = z.object({
+  ...companyFields,
   name: text(2, 80, "Имя"),
   phone: z.union([z.literal(""), phone]).default(""),
   bio: text(0, 1000, "Описание").default(""),
@@ -63,30 +79,37 @@ export const propertySchema = z
   .object({
     title: text(5, 120, "Заголовок"),
     deal: z.enum(["sale", "rent"], { error: "Выберите покупку или аренду" }),
-    category: z.enum(["apartment", "house", "room", "land", "commercial"], {
-      error: "Выберите категорию",
+    category: z.enum(commercialCategories, {
+      error: "Выберите тип коммерческой недвижимости",
     }),
     city: text(2, 80, "Город"),
     district: text(0, 100, "Район").default(""),
     address: text(5, 200, "Адрес"),
     price: positive(999999999999),
     area: positive(99999999),
-    rooms: optionalNumber(z.coerce.number().int().min(0).max(100)).transform(
+    rooms: z
+      .never({ error: "Комнаты не используются для коммерческой недвижимости" })
+      .optional(),
+    buildingClass: z.enum(["", "A", "B", "C"]).default(""),
+    floor: optionalNumber(z.coerce.number().int().min(-5).max(150)).transform(
       (v) => v ?? null,
     ),
+    ceilingHeight: optionalNumber(positive(50)).transform((v) => v ?? null),
+    powerKw: optionalNumber(positive(100000)).transform((v) => v ?? null),
+    parking: z.boolean().default(false),
+    tax: z
+      .enum(["included", "excluded", "no_vat", "unspecified"])
+      .default("unspecified"),
     description: text(20, 10000, "Описание"),
     contactName: text(2, 80, "Контактное имя"),
     contactPhone: phone,
     status: z.enum(["draft", "published", "archived"]).default("draft"),
   })
-  .superRefine((v, ctx) => {
-    if (["apartment", "house", "room"].includes(v.category) && v.rooms === null)
-      ctx.addIssue({
-        code: "custom",
-        path: ["rooms"],
-        message: "Укажите количество комнат (0 — студия)",
-      });
-  });
+  .transform((v) =>
+    v.category === "commercial_land"
+      ? { ...v, buildingClass: "", floor: null, ceilingHeight: null }
+      : v,
+  );
 export const statusSchema = z
   .object({ status: z.enum(["draft", "published", "archived"]) })
   .strict();
@@ -94,14 +117,21 @@ export const searchSchema = z
   .object({
     q: text(0, 100, "Поиск").default(""),
     deal: z.enum(["sale", "rent"]).optional(),
-    category: z
-      .enum(["apartment", "house", "room", "land", "commercial"])
-      .optional(),
+    category: z.enum(commercialCategories).optional(),
     minPrice: optionalNumber(z.coerce.number().min(0).max(999999999999)),
     maxPrice: optionalNumber(z.coerce.number().min(0).max(999999999999)),
     minArea: optionalNumber(z.coerce.number().min(0).max(99999999)),
     maxArea: optionalNumber(z.coerce.number().min(0).max(99999999)),
-    rooms: optionalNumber(z.coerce.number().int().min(0).max(100)),
+    rooms: z
+      .never({ error: "Фильтр комнат больше не поддерживается" })
+      .optional(),
+    buildingClass: z.enum(["A", "B", "C"]).optional(),
+    minCeilingHeight: optionalNumber(z.coerce.number().min(0).max(50)),
+    minPowerKw: optionalNumber(z.coerce.number().min(0).max(100000)),
+    parking: z
+      .enum(["true", "false"])
+      .transform((v) => v === "true")
+      .optional(),
     owner: optionalNumber(z.coerce.number().int().positive().max(2147483647)),
     sort: z.enum(["newest", "price_asc", "price_desc"]).default("newest"),
     page: z.coerce.number().int().min(1).max(100000).default(1),

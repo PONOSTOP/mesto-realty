@@ -4,13 +4,13 @@ import sharp from "sharp";
 const dir = new URL("../public/assets/", import.meta.url);
 await mkdir(dir, { recursive: true });
 const photos = {
-  hero: "photo-1600585154340-be6161a56a0c",
-  "property-1": "photo-1600210492486-724fe5c67fb0",
-  "property-2": "photo-1600607687920-4e2a09cf159d",
-  "property-3": "photo-1600566753086-00f18fb6b3ea",
-  "property-4": "photo-1600047509807-ba8f99d2cdde",
-  "property-5": "photo-1484154218962-a197022b5858",
-  "property-6": "photo-1497366811353-6870744d04b2",
+  hero: "photo-1486406146926-c627a92ad1ab",
+  "property-1": "photo-1497366754035-f200968a6e72",
+  "property-2": "photo-1441986300917-64674bd600d8",
+  "property-3": "photo-1586528116311-ad8dd3c8310d",
+  "property-4": "photo-1565043589221-1a6fd9ae45c7",
+  "property-5": "photo-1497366811353-6870744d04b2",
+  "property-6": "photo-1500382017468-9049fed747ef",
 };
 for (const [name, photo] of Object.entries(photos)) {
   const response = await fetch(

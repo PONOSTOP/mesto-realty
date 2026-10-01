@@ -21,7 +21,12 @@ const propertyKeys = [
   "address",
   "price",
   "area",
-  "rooms",
+  "buildingClass",
+  "floor",
+  "ceilingHeight",
+  "powerKw",
+  "parking",
+  "tax",
   "description",
   "contactName",
   "contactPhone",
@@ -36,7 +41,12 @@ const sqlKeys = [
   "address",
   "price",
   "area",
-  "rooms",
+  "building_class",
+  "floor",
+  "ceiling_height",
+  "power_kw",
+  "parking",
+  "tax",
   "description",
   "contact_name",
   "contact_phone",
@@ -134,7 +144,7 @@ export function propertiesRouter() {
       ).rows[0].contact_phone;
     const owner = (
       await pool.query(
-        "SELECT id,name,bio,avatar_filename FROM users WHERE id=$1",
+        "SELECT id,name,bio,avatar_filename,company,business_role FROM users WHERE id=$1",
         [row.owner_id],
       )
     ).rows[0];
@@ -155,6 +165,8 @@ export function propertiesRouter() {
       owner: {
         id: owner.id,
         name: owner.name,
+        company: owner.company,
+        businessRole: owner.business_role,
         bio: owner.bio,
         avatar: owner.avatar_filename
           ? `/media/${owner.avatar_filename}`
