@@ -28,12 +28,49 @@ export const safeImage = (u) =>
 export const money = (v) =>
   new Intl.NumberFormat("ru-RU").format(Number(v) || 0) + " ₽";
 export const categories = {
-  apartment: "Квартиры",
-  house: "Дома",
-  room: "Комнаты",
-  land: "Участки",
-  commercial: "Коммерция",
+  office: "Офисы",
+  retail: "Торговые помещения",
+  warehouse: "Склады",
+  industrial: "Производство",
+  free_purpose: "Свободное назначение",
+  commercial_land: "Коммерческая земля",
 };
+export const businessRoles = {
+  owner: "Собственник",
+  broker: "Брокер",
+  tenant: "Арендатор",
+};
+export const taxLabels = {
+  included: "НДС включён",
+  excluded: "НДС сверху",
+  no_vat: "Без НДС",
+  unspecified: "Не указан",
+};
+export const rate = (p) =>
+  money(Math.round(p.price / p.area)) +
+  (p.deal === "rent" ? " / м² / мес." : " / м²");
+export function propertyFacts(p) {
+  const facts = [
+    [p.area + " м²", "Площадь"],
+    [categories[p.category], "Назначение"],
+  ];
+  if (p.category !== "commercial_land") {
+    if (p.buildingClass)
+      facts.push(["Класс " + p.buildingClass, "Класс здания"]);
+    if (p.floor !== null && p.floor !== undefined)
+      facts.push([p.floor, "Этаж"]);
+    if (p.ceilingHeight)
+      facts.push([p.ceilingHeight + " м", "Высота потолков"]);
+  }
+  if (p.powerKw) facts.push([p.powerKw + " кВт", "Мощность"]);
+  if (p.parking) facts.push(["Есть", "Парковка"]);
+  return facts
+    .map(
+      ([v, l]) =>
+        `<div><strong>${esc(v)}</strong><span class="muted">${l}</span></div>`,
+    )
+    .join("");
+}
 export const statuses = {
   draft: "Черновик",
   published: "Опубликовано",
@@ -91,7 +128,9 @@ export function authRequired() {
 export const field = (name, label, value = "", attrs = "") =>
   `<label class="field">${label}<input name="${name}" value="${esc(value)}" ${attrs}><span class="field-error" data-error="${name}"></span></label>`;
 export const select = (name, label, options, value = "") =>
-  `<label class="field">${label}<select name="${name}">${Object.entries(options)
+  `<label class="field">${label}<select name="${name}" aria-label="${esc(label)}">${Object.entries(
+    options,
+  )
     .map(
       ([k, v]) =>
         `<option value="${esc(k)}" ${String(value ?? "") === k ? "selected" : ""}>${esc(v)}</option>`,
@@ -121,7 +160,7 @@ export function busy(form, on) {
   form.setAttribute("aria-busy", String(on));
 }
 export function card(p, manage = false) {
-  return `<article class="property-card"><div class="card-photo"><a href="/property/${encodeURIComponent(p.id)}"><img src="${safeImage(p.cover)}" alt="${esc(p.title)}" loading="lazy" width="600" height="420"></a><span class="badge">${p.deal === "rent" ? "Аренда" : "Продажа"}</span><button class="heart ${p.isFavorite ? "active" : ""}" data-favorite="${esc(p.id)}" data-active="${!!p.isFavorite}" aria-label="${p.isFavorite ? "Убрать из избранного" : "Добавить в избранное"}" aria-pressed="${!!p.isFavorite}">${p.isFavorite ? "♥" : "♡"}</button></div><div class="card-body"><div class="card-price">${money(p.price)}${p.deal === "rent" ? "<small> / месяц</small>" : ""}</div><a class="card-title" href="/property/${encodeURIComponent(p.id)}">${esc(p.title)}</a><p class="card-address">${esc(p.city)} · ${esc(p.address)}</p><div class="card-meta"><span>${esc(p.area)} м²</span>${p.rooms !== null && p.rooms !== undefined ? `<span>${Number(p.rooms) === 0 ? "Студия" : esc(p.rooms) + " комн."}</span>` : ""}<span>${esc(categories[p.category] || "Недвижимость")}</span></div>${manage ? `<div class="manage"><span class="status">${esc(statuses[p.status])}</span><a href="/edit/${encodeURIComponent(p.id)}">Изменить</a>${p.status === "published" ? `<button data-archive="${esc(p.id)}">В архив</button>` : ""}<button class="danger-link" data-delete="${esc(p.id)}">Удалить</button></div>` : ""}</div></article>`;
+  return `<article class="property-card"><div class="card-photo"><a href="/property/${encodeURIComponent(p.id)}"><img src="${safeImage(p.cover)}" alt="${esc(p.title)}" loading="lazy" width="600" height="420"></a><button class="heart ${p.isFavorite ? "active" : ""}" data-favorite="${esc(p.id)}" data-active="${!!p.isFavorite}" aria-label="${p.isFavorite ? "Убрать из избранного" : "Добавить в избранное"}" aria-pressed="${!!p.isFavorite}">${p.isFavorite ? "♥" : "♡"}</button></div><div class="card-body"><div class="card-kind">${p.deal === "rent" ? "Аренда" : "Продажа"} · ${esc(categories[p.category])}</div><div class="card-price">${money(p.price)}${p.deal === "rent" ? "<small> / месяц</small>" : ""}</div><p class="card-rate">${rate(p)}</p><a class="card-title" href="/property/${encodeURIComponent(p.id)}">${esc(p.title)}</a><p class="card-address">${esc(p.city)} · ${esc(p.address)}</p><div class="card-meta"><span>${esc(p.area)} м²</span>${p.buildingClass && p.category !== "commercial_land" ? `<span>Класс ${esc(p.buildingClass)}</span>` : ""}${p.floor !== null && p.floor !== undefined && p.category !== "commercial_land" ? `<span>Этаж ${esc(p.floor)}</span>` : ""}${p.ceilingHeight && ["warehouse", "industrial"].includes(p.category) ? `<span>Потолки ${esc(p.ceilingHeight)} м</span>` : ""}</div>${manage ? `<div class="manage"><span class="status">${esc(statuses[p.status])}</span><a href="/edit/${encodeURIComponent(p.id)}">Изменить</a>${p.status === "published" ? `<button data-archive="${esc(p.id)}">В архив</button>` : ""}<button class="danger-link" data-delete="${esc(p.id)}">Удалить</button></div>` : ""}</div></article>`;
 }
 export const empty = (
   title,

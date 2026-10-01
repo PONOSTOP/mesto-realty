@@ -51,26 +51,38 @@ after(async () => {
     throw new Error("Unsafe cleanup");
   await rm(cleanupDir, { recursive: true, force: true });
 });
-async function fillProperty(title = "Квартира для проверки браузера") {
+async function fillProperty(title = "Офис для проверки браузера") {
   await page.getByLabel("Заголовок объявления").fill(title);
   await page.getByLabel("Цена, ₽", { exact: true }).fill("13500000");
   await page.getByLabel("Площадь, м²", { exact: true }).fill("63.5");
-  await page.getByLabel("Количество комнат").fill("2");
+  await page.getByLabel("Класс здания", { exact: true }).selectOption("A");
+  await page.getByLabel("Этаж", { exact: true }).fill("8");
+  await page.getByLabel("Высота потолков, м", { exact: true }).fill("3.8");
+  await page.getByLabel("Мощность, кВт", { exact: true }).fill("50");
+  await page.getByLabel("Парковка", { exact: true }).selectOption("true");
+  await page.getByLabel("НДС", { exact: true }).selectOption("included");
   await page.getByLabel("Город", { exact: true }).fill("Москва");
   await page.getByLabel("Район", { exact: true }).fill("Браузерный район");
   await page.getByLabel("Адрес", { exact: true }).fill("Тестовая улица, 24");
   await page
     .getByLabel("Описание", { exact: true })
     .fill(
-      "Светлая квартира для сквозной проверки. <img src=x onerror=alert(1)>",
+      "Офис для сквозной проверки деловой площадки. <img src=x onerror=alert(1)>",
     );
   await page.getByLabel("Телефон", { exact: true }).fill("+79991112233");
+  await page
+    .getByLabel("Контактное лицо", { exact: true })
+    .fill("Отдел аренды");
 }
 test("browser: account, listing lifecycle, responsiveness and recovery", async (t) => {
   let propertyUrl;
   await t.test("registration then logout and login", async () => {
     await page.goto(base + "/register");
     await page.getByLabel("Ваше имя").fill("Браузерный владелец");
+    await page
+      .getByLabel("Компания", { exact: true })
+      .fill("Тестовая компания");
+    await page.getByLabel("Ваша роль", { exact: true }).selectOption("broker");
     await page.getByLabel("Электронная почта").fill(email);
     await page.getByLabel("Пароль", { exact: true }).fill(password);
     await page.getByLabel("Повторите пароль").fill(password);
@@ -106,6 +118,11 @@ test("browser: account, listing lifecycle, responsiveness and recovery", async (
       await page.waitForURL("**/property/*");
       propertyUrl = page.url();
       await page.locator(".gallery-main").waitFor();
+      assert.match(
+        await page.locator(".owner").innerText(),
+        /Тестовая компания/,
+      );
+      assert.match(await page.locator(".owner").innerText(), /Брокер/);
       assert.equal(await page.locator(".description img").count(), 0);
       assert.match(
         await page.locator(".description").innerText(),
@@ -125,10 +142,29 @@ test("browser: account, listing lifecycle, responsiveness and recovery", async (
   );
   await t.test("URL search and persisted favorites", async () => {
     await page.goto(
-      base + "/catalog?q=" + encodeURIComponent("Браузерный район"),
+      base +
+        "/catalog?category=office&buildingClass=A&minCeilingHeight=3.5&minPowerKw=40&parking=true&q=" +
+        encodeURIComponent("Браузерный район"),
     );
     await page.locator("#result-count").filter({ hasText: "1" }).waitFor();
-    assert.equal(await page.locator('select[name="rooms"]').inputValue(), "");
+    assert.equal(await page.locator('[name="rooms"]').count(), 0);
+    assert.equal(
+      await page.locator('[name="buildingClass"]').inputValue(),
+      "A",
+    );
+    assert.equal(
+      await page.locator('[name="minCeilingHeight"]').inputValue(),
+      "3.5",
+    );
+    assert.equal(await page.locator('[name="minPowerKw"]').inputValue(), "40");
+    assert.equal(await page.locator('[name="parking"]').inputValue(), "true");
+    await page.locator('[name="minArea"]').fill("63.5");
+    await page.locator('[name="maxArea"]').fill("63.5");
+    await page
+      .getByRole("button", { name: "Показать объявления", exact: true })
+      .click();
+    await page.waitForURL((url) => url.searchParams.get("minArea") === "63.5");
+    await page.locator("#result-count").filter({ hasText: "1" }).waitFor();
     await page
       .getByRole("button", { name: "Добавить в избранное", exact: true })
       .click();
@@ -146,7 +182,7 @@ test("browser: account, listing lifecycle, responsiveness and recovery", async (
     await page.goto(base + "/account?tab=favorites");
     await page
       .locator(".card-title")
-      .filter({ hasText: "Квартира для проверки браузера" })
+      .filter({ hasText: "Офис для проверки браузера" })
       .waitFor();
     assert.equal(await page.locator(".property-card").count(), 1);
   });
@@ -155,7 +191,7 @@ test("browser: account, listing lifecycle, responsiveness and recovery", async (
     await page
       .getByRole("link", { name: "Редактировать", exact: true })
       .click();
-    await page.getByLabel("Заголовок объявления").fill("Обновлённая квартира");
+    await page.getByLabel("Заголовок объявления").fill("Обновлённый офис");
     await page.getByLabel("Цена, ₽", { exact: true }).fill("12900000");
     page.once("dialog", (d) => d.accept());
     await page
@@ -170,7 +206,7 @@ test("browser: account, listing lifecycle, responsiveness and recovery", async (
       .click();
     await page.waitForURL(propertyUrl);
     await page
-      .getByRole("heading", { name: "Обновлённая квартира", exact: true })
+      .getByRole("heading", { name: "Обновлённый офис", exact: true })
       .waitFor();
     assert.match(
       await page.locator(".detail-price").innerText(),
@@ -188,10 +224,12 @@ test("browser: account, listing lifecycle, responsiveness and recovery", async (
   await t.test("profile and avatar persist", async () => {
     await page.goto(base + "/account?tab=profile");
     await page.getByLabel("Имя", { exact: true }).fill("Анна Браузерная");
+    await page.getByLabel("Компания", { exact: true }).fill("Новая компания");
+    await page.getByLabel("Ваша роль", { exact: true }).selectOption("owner");
     await page.getByLabel("Телефон", { exact: true }).fill("+79998887766");
     await page
-      .getByLabel("О себе", { exact: true })
-      .fill("Описание профиля из браузера.");
+      .getByLabel("О компании и вашей работе", { exact: true })
+      .fill("Описание компании из браузера.");
     await page
       .getByRole("button", { name: "Сохранить изменения", exact: true })
       .click();
@@ -212,7 +250,88 @@ test("browser: account, listing lifecycle, responsiveness and recovery", async (
       await page.getByLabel("Имя", { exact: true }).inputValue(),
       "Анна Браузерная",
     );
+    assert.equal(
+      await page.getByLabel("Компания", { exact: true }).inputValue(),
+      "Новая компания",
+    );
+    assert.equal(
+      await page.getByLabel("Ваша роль", { exact: true }).inputValue(),
+      "owner",
+    );
+    await page.getByLabel("Компания", { exact: true }).fill("");
+    await page
+      .getByRole("button", { name: "Сохранить изменения", exact: true })
+      .click();
+    await page
+      .locator("#toast")
+      .filter({ hasText: "Изменения сохранены" })
+      .waitFor();
+    await page.goto(propertyUrl);
+    await page.locator(".owner").waitFor();
+    assert.match(await page.locator(".owner").innerText(), /Отдел аренды/);
   });
+  await t.test(
+    "commercial categories, legacy URLs and land-specific fields",
+    async () => {
+      const expected = [
+        "office",
+        "retail",
+        "warehouse",
+        "industrial",
+        "free_purpose",
+        "commercial_land",
+      ];
+      await page.goto(base + "/catalog?category=apartment&rooms=2");
+      await page.locator("#result-count").waitFor();
+      assert.equal(new URL(page.url()).searchParams.has("rooms"), false);
+      assert.equal(new URL(page.url()).searchParams.has("category"), false);
+      assert.deepEqual(
+        await page
+          .locator('[name="category"] option')
+          .evaluateAll((options) =>
+            options.map((o) => o.value).filter(Boolean),
+          ),
+        expected,
+      );
+      assert.doesNotMatch(
+        await page.locator("body").innerText(),
+        /квартир|комнат|студии|жил[а-яё]* недвижим/iu,
+      );
+      await page.goto(base + "/publish");
+      await page.locator("#editor").waitFor();
+      await fillProperty("Участок для коммерческого проекта");
+      await page.locator('[name="ceilingHeight"]').fill("51");
+      assert.deepEqual(
+        await page
+          .locator('[name="category"] option')
+          .evaluateAll((options) => options.map((o) => o.value)),
+        expected,
+      );
+      await page.locator('[name="category"]').selectOption("commercial_land");
+      for (const name of ["buildingClass", "floor", "ceilingHeight"])
+        assert.equal(await page.locator(`[name="${name}"]`).isVisible(), false);
+      assert.equal(await page.locator('[name="powerKw"]').isVisible(), true);
+      assert.equal(await page.locator('[name="rooms"]').count(), 0);
+      await page
+        .getByRole("button", { name: "Сохранить черновик", exact: true })
+        .click();
+      await page.waitForURL("**/account");
+      await page
+        .locator(".card-title")
+        .filter({ hasText: "Участок для коммерческого проекта" })
+        .click();
+      await page.waitForURL("**/property/*");
+      const land = await page.evaluate(async () => {
+        const id = location.pathname.split("/").pop();
+        return (await (await fetch("/api/properties/" + id)).json()).property;
+      });
+      assert.equal(land.category, "commercial_land");
+      assert.equal(land.buildingClass, "");
+      assert.equal(land.floor, null);
+      assert.equal(land.ceilingHeight, null);
+      assert.equal(Number(land.powerKw), 50);
+    },
+  );
   await t.test(
     "mobile, tablet and desktop layouts do not overflow",
     async () => {
@@ -318,14 +437,14 @@ test("browser: account, listing lifecycle, responsiveness and recovery", async (
     }
     await page
       .getByRole("heading", {
-        name: "Здесь начнётся новая история",
+        name: "Разместите первый объект",
         exact: true,
       })
       .waitFor();
     await page.goto(base + "/account?tab=favorites");
     await page
       .getByRole("heading", {
-        name: "Сохраните места, которые понравились",
+        name: "Соберите подходящие объекты",
         exact: true,
       })
       .waitFor();
