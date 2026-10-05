@@ -3,15 +3,26 @@ import { rateLimit } from "express-rate-limit";
 import { config } from "./config.js";
 import { listProperties } from "./property-data.js";
 import { createAssistant } from "./assistant-service.js";
+import { createCatalogAssistant } from "./catalog-assistant.js";
+import { pool } from "./db.js";
 
-export function assistantRouter({
-  chat,
-  enabled = Boolean(config.ai.apiKey && config.ai.model),
-} = {}) {
+export function assistantRouter({ chat, enabled = true } = {}) {
   const router = Router();
+  const mode = config.ai.apiKey && config.ai.model ? "ai" : "catalog";
   const respond =
-    chat || createAssistant({ ...config.ai, search: listProperties });
-  router.get("/", (req, res) => res.json({ enabled }));
+    chat ||
+    (mode === "ai"
+      ? createAssistant({ ...config.ai, search: listProperties })
+      : createCatalogAssistant({
+          search: listProperties,
+          locations: async () =>
+            (
+              await pool.query(
+                "SELECT DISTINCT city FROM properties WHERE status='published' ORDER BY city LIMIT 100",
+              )
+            ).rows.map((row) => row.city),
+        }));
+  router.get("/", (req, res) => res.json({ enabled, mode }));
   router.post(
     "/",
     rateLimit({

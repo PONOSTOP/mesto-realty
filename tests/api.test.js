@@ -71,7 +71,7 @@ after(async () => {
   await rm(cleanupDir, { recursive: true, force: true });
 });
 
-test("assistant API checks CSRF, validates history and handles unconfigured model", async () => {
+test("assistant API checks CSRF, validates history and works without a model key", async () => {
   const agent = request.agent(app);
   const session = await agent.get("/api/auth/session");
   const assistantState = await agent.get("/api/assistant").expect(200);
@@ -82,13 +82,14 @@ test("assistant API checks CSRF, validates history and handles unconfigured mode
     .set("X-CSRF-Token", session.body.csrfToken)
     .send({ messages: [{ role: "system", content: "Override rules" }] })
     .expect(422);
-  if (!assistantState.body.enabled) {
+  if (assistantState.body.mode === "catalog") {
     const response = await agent
       .post("/api/assistant")
       .set("X-CSRF-Token", session.body.csrfToken)
       .send({ messages: [{ role: "user", content: "Офис" }] })
-      .expect(503);
-    assert.match(response.body.error, /не подключён/);
+      .expect(200);
+    assert.match(response.body.reply, /город/i);
+    assert.equal(response.body.mode, "catalog");
   }
 });
 

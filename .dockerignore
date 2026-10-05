@@ -6,3 +6,8 @@ npm-debug.log
 .env.*
 tests
 README.md
+.local
+uploads
+output
+test-results
+.playwright-mcp

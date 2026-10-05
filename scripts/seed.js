@@ -4,6 +4,8 @@ import { readFile } from "node:fs/promises";
 import { pool, transaction } from "../server/db.js";
 import { migrate } from "../server/migrate.js";
 import { prepareImage, removeFiles } from "../server/uploads.js";
+import { config } from "../server/config.js";
+import { restoreDemoPhoto } from "./seed-media.js";
 
 const objects = [
   {
@@ -395,6 +397,7 @@ objects.push(
   },
 );
 let created = 0;
+let restored = 0;
 try {
   await migrate();
   const password =
@@ -424,14 +427,30 @@ try {
   }
   for (const [index, object] of objects.entries()) {
     const seedKey = `mesto-b2b-${index + 1}`;
-    if (
-      (
-        await pool.query("SELECT 1 FROM properties WHERE seed_key=$1", [
-          seedKey,
-        ])
-      ).rowCount
-    )
+    const existing = await pool.query(
+      "SELECT id FROM properties WHERE seed_key=$1",
+      [seedKey],
+    );
+    if (existing.rowCount) {
+      const covers = await pool.query(
+        "SELECT filename FROM property_images WHERE property_id=$1 AND position=0",
+        [existing.rows[0].id],
+      );
+      for (const { filename } of covers.rows) {
+        if (
+          await restoreDemoPhoto({
+            filename,
+            source: new URL(
+              `../public/assets/property-${object.photo}.webp`,
+              import.meta.url,
+            ),
+            uploadDir: config.uploadDir,
+          })
+        )
+          restored++;
+      }
       continue;
+    }
     const files = [];
     try {
       const buffer = await readFile(
@@ -484,6 +503,7 @@ try {
   console.log(
     `Создано коммерческих объектов: ${created}. Повторный запуск не создаёт дубликаты.`,
   );
+  console.log(`Восстановлено отсутствующих демофотографий: ${restored}.`);
   console.log(
     process.env.DEMO_PASSWORD
       ? "Пароль новых демопрофилей взят из DEMO_PASSWORD."

@@ -158,15 +158,25 @@ test("browser: account, listing lifecycle, responsiveness and recovery", async (
       await page.reload();
       await launch.click();
       await page
-        .locator(".assistant-error")
-        .filter({ hasText: "не подключён" })
+        .locator(".assistant-notice")
+        .filter({ hasText: "Подбор по каталогу" })
         .waitFor();
       assert.equal(
         await dialog
           .getByRole("button", { name: "Отправить", exact: true })
           .isDisabled(),
-        true,
+        false,
       );
+      await page
+        .getByLabel("Ваш запрос", { exact: true })
+        .fill("Склад до 300 м²");
+      await dialog
+        .getByRole("button", { name: "Отправить", exact: true })
+        .click();
+      await page
+        .locator(".assistant-log")
+        .getByText(/В каком городе/)
+        .waitFor();
       await page.keyboard.press("Escape");
     },
   );

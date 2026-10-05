@@ -1,7 +1,7 @@
 import { z } from "zod";
 import { parse, searchSchema } from "./validation.js";
 
-const historySchema = z
+export const historySchema = z
   .array(
     z
       .object({
@@ -72,7 +72,7 @@ const unavailable = () =>
     ),
     { status: 503 },
   );
-function publicProperty(p) {
+export function publicProperty(p) {
   if (!Number.isInteger(p.id) || p.id < 1) return null;
   return {
     id: p.id,

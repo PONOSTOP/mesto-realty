@@ -38,9 +38,14 @@ export function initAssistant() {
     if (!checked) {
       send.disabled = true;
       try {
-        const { enabled } = await api("/assistant");
+        const { enabled, mode } = await api("/assistant");
         checked = true;
         send.disabled = !enabled || pending;
+        if (mode === "catalog") {
+          launch.lastChild.textContent = "Подобрать объект";
+          root.querySelector(".assistant-notice").textContent =
+            "Подбор по каталогу: город, назначение, бюджет и площадь. Проверяйте условия в карточке объекта.";
+        }
         if (!enabled) {
           errorBox.textContent =
             "ИИ-помощник ещё не подключён. Пока используйте каталог объектов.";
