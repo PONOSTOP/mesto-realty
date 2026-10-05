@@ -13,13 +13,14 @@ import { authRouter } from "./auth.js";
 import { propertiesRouter } from "./properties.js";
 import { profileRouter } from "./profile.js";
 import { uploadsRouter, serveMedia } from "./uploads.js";
+import { assistantRouter } from "./assistant.js";
 
 const publicDir = fileURLToPath(new URL("../public/", import.meta.url));
-export function createApp() {
+export function createApp({ assistant } = {}) {
   const app = express();
 
   app.set("trust proxy", 1);
-  
+
   app.disable("x-powered-by");
   if (config.trustProxy) app.set("trust proxy", config.trustProxy);
   app.use(
@@ -102,6 +103,7 @@ export function createApp() {
   });
   app.use("/api/auth", authRouter());
   app.use("/api/profile", profileRouter());
+  app.use("/api/assistant", assistantRouter(assistant));
   app.use("/api", propertiesRouter(), uploadsRouter());
   app.use("/api", (req, res) =>
     res.status(404).json({ error: "Маршрут API не найден" }),

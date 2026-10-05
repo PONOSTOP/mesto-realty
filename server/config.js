@@ -19,4 +19,9 @@ export const config = {
   databaseUrl: process.env.DATABASE_URL,
   uploadDir: path.resolve(process.env.UPLOAD_DIR || "./uploads"),
   trustProxy: Number(process.env.TRUST_PROXY || 0),
+  ai: {
+    apiKey: process.env.AI_API_KEY || "",
+    model: process.env.AI_MODEL || "",
+    baseUrl: process.env.AI_BASE_URL || "https://api.openai.com/v1",
+  },
 };
