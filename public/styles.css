@@ -20,6 +20,195 @@
   --soft: #eaf0ff;
   --radius: 8px;
 }
+#assistant {
+  position: fixed;
+  right: max(20px, env(safe-area-inset-right));
+  bottom: max(20px, env(safe-area-inset-bottom));
+  z-index: 60;
+}
+.assistant-launch {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 13px 18px;
+  border: 0;
+  border-radius: var(--radius);
+  background: var(--blue);
+  color: white;
+  font-weight: 700;
+  box-shadow: 0 6px 24px #172b4326;
+}
+.assistant-panel {
+  position: absolute;
+  right: 0;
+  bottom: 64px;
+  width: 410px;
+  max-width: calc(100vw - 40px);
+  max-height: calc(100dvh - 110px);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: white;
+  box-shadow: 0 16px 60px #172b4326;
+}
+.assistant-panel[hidden],
+.assistant-examples[hidden],
+.assistant-error[hidden] {
+  display: none;
+}
+.assistant-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 16px 20px;
+  border-bottom: 1px solid var(--line);
+  background: var(--soft);
+}
+.assistant-header h2 {
+  margin: 0;
+  font-size: 18px;
+}
+.assistant-header p {
+  margin: 3px 0 0;
+  font-size: 12px;
+  color: var(--muted);
+}
+.assistant-close {
+  width: 44px;
+  height: 44px;
+  flex-shrink: 0;
+  border: 0;
+  background: transparent;
+  color: var(--ink);
+  font-size: 28px;
+}
+.assistant-log {
+  min-height: 90px;
+  max-height: 360px;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  padding: 18px;
+}
+.assistant-message {
+  margin-bottom: 12px;
+  padding: 12px 14px;
+  border-radius: 8px;
+  background: var(--paper);
+  overflow-wrap: anywhere;
+  white-space: pre-wrap;
+  font-size: 14px;
+}
+.assistant-user {
+  margin-left: 26px;
+  background: var(--soft);
+}
+.assistant-properties {
+  display: grid;
+  gap: 8px;
+  margin-bottom: 12px;
+}
+.assistant-property {
+  display: grid;
+  gap: 4px;
+  padding: 12px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  overflow-wrap: anywhere;
+}
+.assistant-property:hover {
+  border-color: var(--blue);
+}
+.assistant-property span {
+  font-size: 12px;
+  color: var(--muted);
+}
+.assistant-property b {
+  font-size: 14px;
+}
+.assistant-examples {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  padding: 0 18px 12px;
+}
+.assistant-examples button {
+  min-height: 44px;
+  padding: 6px 10px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: white;
+  color: var(--ink);
+  font-size: 12px;
+}
+.assistant-notice {
+  margin: 0;
+  padding: 0 18px 12px;
+  color: var(--muted);
+  font-size: 12px;
+}
+.assistant-error {
+  margin: 0;
+  padding: 0 18px 12px;
+  color: #a72f24;
+  font-size: 13px;
+}
+.assistant-form {
+  padding: 12px 18px;
+  border-top: 1px solid var(--line);
+}
+.assistant-form label {
+  display: block;
+  margin-bottom: 5px;
+  font-size: 12px;
+  font-weight: 700;
+}
+.assistant-form > div {
+  display: flex;
+  align-items: end;
+  gap: 8px;
+}
+.assistant-form textarea {
+  width: 100%;
+  min-width: 0;
+  max-height: 100px;
+  min-height: 62px;
+  resize: vertical;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  padding: 8px;
+  color: var(--ink);
+  background: white;
+  font-size: 14px;
+}
+.assistant-form .button {
+  flex-shrink: 0;
+  padding: 10px 12px;
+  font-size: 13px;
+}
+.assistant-catalog {
+  padding: 0 18px 14px;
+  color: var(--blue);
+  font-size: 12px;
+}
+@media (max-width: 480px) {
+  #assistant {
+    right: 12px;
+    bottom: max(12px, env(safe-area-inset-bottom));
+  }
+  .assistant-panel {
+    width: calc(100vw - 24px);
+    max-width: none;
+    bottom: 60px;
+    max-height: calc(100dvh - 88px);
+  }
+  .assistant-launch {
+    padding: 12px 14px;
+    font-size: 13px;
+  }
+}
 @keyframes page-exit {
   to {
     opacity: 0;

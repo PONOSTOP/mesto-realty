@@ -77,6 +77,100 @@ async function fillProperty(title = "Офис для проверки брауз
 test("browser: account, listing lifecycle, responsiveness and recovery", async (t) => {
   let propertyUrl;
   await t.test(
+    "assistant safely renders results, retries failure and works on mobile",
+    async () => {
+      let attempts = 0;
+      await page.route("**/api/assistant", async (route) => {
+        if (route.request().method() === "GET")
+          return route.fulfill({ json: { enabled: true } });
+        if (++attempts === 1)
+          return route.fulfill({
+            status: 503,
+            json: { error: "Повторите запрос" },
+          });
+        const body = route.request().postDataJSON();
+        assert.equal(body.messages.at(-1).content, "Офис в Москве");
+        return route.fulfill({
+          json: {
+            reply: "Вариант <img src=x onerror=alert(1)>",
+            properties: [
+              {
+                id: 7,
+                title: "Офис <script>alert(1)</script>",
+                city: "Москва",
+                area: 100,
+                price: 150000,
+                deal: "rent",
+                category: "office",
+                url: "javascript:alert(1)",
+              },
+            ],
+          },
+        });
+      });
+      await page.goto(base + "/");
+      const launch = page.getByRole("button", { name: "Подобрать с ИИ" });
+      await launch.click();
+      const dialog = page.getByRole("dialog", { name: "Помощник по подбору" });
+      await page
+        .getByLabel("Ваш запрос", { exact: true })
+        .fill("Офис в Москве");
+      await dialog
+        .getByRole("button", { name: "Отправить", exact: true })
+        .click();
+      await page
+        .locator(".assistant-error")
+        .filter({ hasText: "Повторите запрос" })
+        .waitFor();
+      assert.equal(
+        await page.getByLabel("Ваш запрос", { exact: true }).inputValue(),
+        "Офис в Москве",
+      );
+      await dialog
+        .getByRole("button", { name: "Отправить", exact: true })
+        .click();
+      await page.locator(".assistant-property").waitFor();
+      assert.equal(
+        await page.locator(".assistant-property").getAttribute("href"),
+        "/property/7",
+      );
+      assert.equal(
+        await page.locator(".assistant-log img,.assistant-log script").count(),
+        0,
+      );
+      await page.setViewportSize({ width: 390, height: 844 });
+      const box = await dialog.boundingBox();
+      assert.ok(
+        box.x >= 0 &&
+          box.x + box.width <= 390 &&
+          box.y >= 0 &&
+          box.y + box.height <= 844,
+      );
+      await page.screenshot({ path: "output/playwright/assistant-mobile.png" });
+      await page.keyboard.press("Escape");
+      assert.equal(await dialog.isVisible(), false);
+      assert.equal(
+        await launch.evaluate((el) => el === document.activeElement),
+        true,
+      );
+      await page.setViewportSize({ width: 1440, height: 960 });
+      await page.unroute("**/api/assistant");
+      await page.reload();
+      await launch.click();
+      await page
+        .locator(".assistant-error")
+        .filter({ hasText: "не подключён" })
+        .waitFor();
+      assert.equal(
+        await dialog
+          .getByRole("button", { name: "Отправить", exact: true })
+          .isDisabled(),
+        true,
+      );
+      await page.keyboard.press("Escape");
+    },
+  );
+  await t.test(
     "page navigation animates content and respects reduced motion",
     async () => {
       await page.goto(base + "/");

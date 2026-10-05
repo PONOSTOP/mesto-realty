@@ -19,7 +19,9 @@ import {
   navigate,
 } from "./core.js";
 import { authPage, accountPage, editorPage } from "./forms.js";
+import { initAssistant } from "./assistant.js";
 const main = document.querySelector("#main");
+initAssistant();
 function header() {
   document.querySelector("#header").innerHTML =
     `<div class="container header-inner"><a class="logo" href="/" aria-label="Место Бизнес: главная">место<span>БИЗНЕС</span></a><nav class="main-nav" aria-label="Основная навигация"><a href="/catalog?deal=sale">Продажа</a><a href="/catalog?deal=rent">Аренда</a><a href="/catalog">Каталог</a></nav><div class="header-actions"><a class="favorite-nav" href="/account?tab=favorites">♡ &nbsp;Избранное</a><a href="${state.user ? "/account" : "/login"}">${state.user ? "Кабинет" : "Войти"}</a><a class="button" href="/publish">Разместить объект</a></div></div>`;
