@@ -153,3 +153,34 @@ test("limits repeated model tool calls", async () => {
   await assert.rejects(chat(input), { status: 503 });
   assert.equal(searches, 3);
 });
+
+test("provider failures expose only a safe diagnostic category", async () => {
+  for (const [status, code, reason] of [
+    [401, "invalid_api_key", "invalid_api_key"],
+    [403, "unsupported_country_region_territory", "unsupported_region"],
+    [403, "permission_denied", "access_denied"],
+    [429, "insufficient_quota", "quota_exceeded"],
+    [429, "rate_limit_exceeded", "rate_limited"],
+    [404, "model_not_found", "model_unavailable"],
+    [400, "invalid_request_error", "invalid_request"],
+  ]) {
+    const chat = module.createAssistant(
+      options({
+        fetchImpl: async () => ({
+          ok: false,
+          status,
+          json: async () => ({
+            error: { code, message: "PRIVATE_KEY_AND_BODY" },
+          }),
+        }),
+      }),
+    );
+    await assert.rejects(
+      chat(input),
+      (error) =>
+        error.status === 503 &&
+        error.reason === reason &&
+        !error.message.includes("PRIVATE_KEY_AND_BODY"),
+    );
+  }
+});

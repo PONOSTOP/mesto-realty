@@ -26,6 +26,7 @@ export function assistantRouter({ chat, enabled = true } = {}) {
     res.json({
       enabled,
       mode,
+      diagnosticsVersion: 1,
       configuration: {
         apiKeySet: Boolean(config.ai.apiKey),
         modelSet: Boolean(config.ai.model),
@@ -49,7 +50,12 @@ export function assistantRouter({ chat, enabled = true } = {}) {
       } catch (error) {
         // These messages are created by our service, never by the provider.
         if (error.status === 503)
-          return res.status(503).json({ error: error.message });
+          return res
+            .status(503)
+            .json({
+              error: error.message,
+              ...(error.reason ? { reason: error.reason } : {}),
+            });
         throw error;
       }
     },
