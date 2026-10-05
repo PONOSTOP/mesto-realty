@@ -76,6 +76,10 @@ test("assistant API checks CSRF, validates history and works without a model key
   const session = await agent.get("/api/auth/session");
   const assistantState = await agent.get("/api/assistant").expect(200);
   assert.equal(typeof assistantState.body.enabled, "boolean");
+  assert.deepEqual(assistantState.body.configuration, {
+    apiKeySet: Boolean(process.env.AI_API_KEY),
+    modelSet: Boolean(process.env.AI_MODEL),
+  });
   await agent.post("/api/assistant").send({ messages: [] }).expect(403);
   await agent
     .post("/api/assistant")

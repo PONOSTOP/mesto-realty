@@ -22,7 +22,16 @@ export function assistantRouter({ chat, enabled = true } = {}) {
               )
             ).rows.map((row) => row.city),
         }));
-  router.get("/", (req, res) => res.json({ enabled, mode }));
+  router.get("/", (req, res) =>
+    res.json({
+      enabled,
+      mode,
+      configuration: {
+        apiKeySet: Boolean(config.ai.apiKey),
+        modelSet: Boolean(config.ai.model),
+      },
+    }),
+  );
   router.post(
     "/",
     rateLimit({
