@@ -62,7 +62,7 @@ class WorkerTests(unittest.TestCase):
         self.assertEqual(commands[0][:2], ['ns-process-data','images'])
         self.assertIn('--viewer.quit-on-train-completion', commands[1])
         self.assertIn('tensorboard', commands[1])
-        self.assertEqual(commands[1][-7:], ['nerfstudio','--auto-scale-poses','False','--center-method','none','--orientation-method','none'])
+        self.assertEqual(commands[1][-7:], ['nerfstudio-data','--auto-scale-poses','False','--center-method','none','--orientation-method','none'])
 
     def test_selects_largest_colmap_component_instead_of_first(self):
         import struct

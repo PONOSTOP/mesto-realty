@@ -204,7 +204,7 @@ def best_colmap_model(processed):
 def commands(root):
     return [
         ['ns-process-data','images','--data',str(root/'images'),'--output-dir',str(root/'processed'),'--matching-method','exhaustive'],
-        ['ns-train','splatfacto','--data',str(root/'processed'),'--output-dir',str(root/'outputs'),'--max-num-iterations','30000','--viewer.quit-on-train-completion','True','--vis','tensorboard','nerfstudio','--auto-scale-poses','False','--center-method','none','--orientation-method','none'],
+        ['ns-train','splatfacto','--data',str(root/'processed'),'--output-dir',str(root/'outputs'),'--max-num-iterations','30000','--viewer.quit-on-train-completion','True','--vis','tensorboard','nerfstudio-data','--auto-scale-poses','False','--center-method','none','--orientation-method','none'],
     ]
 
 class Lease:
