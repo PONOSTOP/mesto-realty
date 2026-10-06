@@ -11,6 +11,7 @@ import {
   listProperties,
 } from "./property-data.js";
 import { removeFiles } from "./uploads.js";
+import { queueRoomModel, removeModelFiles } from "./room-models.js";
 
 const propertyKeys = [
   "title",
@@ -193,6 +194,7 @@ export function propertiesRouter() {
     res.status(201).json({ property: propertyView(row) });
   });
   router.patch("/properties/:id", requireAuth, async (req, res) => {
+    let oldModel;
     const row = await transaction(async (client) => {
       const current = await owned(
         client,
@@ -219,16 +221,21 @@ export function propertiesRouter() {
       }
       const values = propertyKeys.map((k) => data[k]);
       values.push(current.id);
-      return (
+      const updated = (
         await client.query(
           `UPDATE properties SET ${sqlKeys.map((k, i) => `${k}=$${i + 1}`).join(",")},updated_at=now() WHERE id=$${values.length} RETURNING *`,
           values,
         )
       ).rows[0];
+      if (data.category !== current.category)
+        oldModel = await queueRoomModel(client, current.id);
+      return updated;
     });
+    await removeModelFiles([oldModel]);
     res.json({ property: propertyView(row) });
   });
   router.delete("/properties/:id", requireAuth, async (req, res) => {
+    let modelFile;
     const files = await transaction(async (client) => {
       const current = await owned(
         client,
@@ -241,10 +248,17 @@ export function propertiesRouter() {
           [current.id],
         )
       ).rows;
+      modelFile = (
+        await client.query(
+          "SELECT filename FROM property_models WHERE property_id=$1 FOR UPDATE",
+          [current.id],
+        )
+      ).rows[0]?.filename;
       await client.query("DELETE FROM properties WHERE id=$1", [current.id]);
       return images.map((i) => i.filename);
     });
     await removeFiles(files);
+    await removeModelFiles([modelFile]);
     res.sendStatus(204);
   });
   return router;

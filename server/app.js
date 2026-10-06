@@ -14,6 +14,11 @@ import { propertiesRouter } from "./properties.js";
 import { profileRouter } from "./profile.js";
 import { uploadsRouter, serveMedia } from "./uploads.js";
 import { assistantRouter } from "./assistant.js";
+import {
+  roomModelsRouter,
+  roomModelWorkerRouter,
+  serveRoomModel,
+} from "./room-models.js";
 
 const publicDir = fileURLToPath(new URL("../public/", import.meta.url));
 export function createApp({ assistant } = {}) {
@@ -28,7 +33,14 @@ export function createApp({ assistant } = {}) {
       contentSecurityPolicy: {
         directives: {
           defaultSrc: ["'self'"],
-          scriptSrc: ["'self'"],
+          scriptSrc: [
+            "'self'",
+            (req) =>
+              /^\/property\/\d+\/?$/.test(req.path)
+                ? "'wasm-unsafe-eval'"
+                : "'self'",
+          ],
+          workerSrc: ["'self'", "blob:"],
           styleSrc: ["'self'"],
           imgSrc: ["'self'", "blob:", "data:"],
           fontSrc: ["'self'"],
@@ -82,6 +94,7 @@ export function createApp({ assistant } = {}) {
     }),
   );
   app.use(express.json({ limit: "100kb", strict: true }));
+  app.use("/internal/room-models", roomModelWorkerRouter());
   app.use("/api", (req, res, next) => {
     res.set("Cache-Control", "no-store");
     next();
@@ -104,11 +117,12 @@ export function createApp({ assistant } = {}) {
   app.use("/api/auth", authRouter());
   app.use("/api/profile", profileRouter());
   app.use("/api/assistant", assistantRouter(assistant));
-  app.use("/api", propertiesRouter(), uploadsRouter());
+  app.use("/api", propertiesRouter(), uploadsRouter(), roomModelsRouter());
   app.use("/api", (req, res) =>
     res.status(404).json({ error: "Маршрут API не найден" }),
   );
   app.get("/media/:filename", serveMedia);
+  app.get("/models/:id/:revision/scene.ply", serveRoomModel);
   app.get(
     /^\/(?:catalog|property\/\d+|login|register|account|publish|edit\/\d+)?\/?$/,
     (req, res) => res.sendFile(path.join(publicDir, "index.html")),

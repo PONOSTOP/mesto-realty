@@ -10,6 +10,7 @@ import { pool, transaction } from "./db.js";
 import { requireAuth, notFound } from "./security.js";
 import { id } from "./validation.js";
 import { imageView } from "./property-data.js";
+import { queueRoomModel, removeModelFiles } from "./room-models.js";
 
 const allowedMime = {
   "image/jpeg": "jpeg",
@@ -118,6 +119,7 @@ export function uploadsRouter() {
           .status(422)
           .json({ error: "Выберите хотя бы одну фотографию" });
       const files = [];
+      let oldModel;
       try {
         for (const file of req.files) files.push(await prepareImage(file));
         const images = await transaction(async (client) => {
@@ -136,9 +138,9 @@ export function uploadsRouter() {
               [id(req.params.id)],
             )
           ).rows;
-          if (rows.length + files.length > 10)
+          if (rows.length + files.length > 200)
             throw Object.assign(
-              new Error("У объекта может быть не более 10 фотографий"),
+              new Error("У объекта может быть не более 200 фотографий"),
               { status: 422 },
             );
           let pos = rows.length
@@ -153,8 +155,10 @@ export function uploadsRouter() {
                 )
               ).rows[0],
             );
+          oldModel = await queueRoomModel(client, id(req.params.id));
           return rows.map(imageView);
         });
+        await removeModelFiles([oldModel]);
         res.status(201).json({ images });
       } catch (err) {
         await removeFiles(files);
@@ -166,6 +170,7 @@ export function uploadsRouter() {
     "/properties/:id/images/:imageId",
     requireAuth,
     async (req, res) => {
+      let oldModel;
       const filename = await transaction(async (client) => {
         const property = (
           await client.query(
@@ -199,9 +204,11 @@ export function uploadsRouter() {
         await client.query("DELETE FROM property_images WHERE id=$1", [
           id(req.params.imageId),
         ]);
+        oldModel = await queueRoomModel(client, id(req.params.id));
         return image.filename;
       });
       await removeFiles([filename]);
+      await removeModelFiles([oldModel]);
       res.sendStatus(204);
     },
   );
