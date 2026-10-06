@@ -241,9 +241,15 @@ export async function editorPage(id) {
           return `<div class="photo-preview"><img src="${url}" alt="${esc(file.name)}"><button type="button" data-remove-pending="${i}">Убрать фото</button></div>`;
         })
         .join("");
+    form
+      .querySelectorAll("[data-remove-image], [data-remove-pending]")
+      .forEach((button) => {
+        button.disabled = form.getAttribute("aria-busy") === "true";
+      });
     document.querySelectorAll("[data-remove-pending]").forEach(
       (b) =>
         (b.onclick = () => {
+          if (form.getAttribute("aria-busy") === "true") return;
           pending.splice(Number(b.dataset.removePending), 1);
           renderPhotos();
         }),
@@ -251,6 +257,7 @@ export async function editorPage(id) {
     document.querySelectorAll("[data-remove-image]").forEach(
       (b) =>
         (b.onclick = async () => {
+          if (form.getAttribute("aria-busy") === "true") return;
           if (!confirm("Удалить эту фотографию?")) return;
           b.disabled = true;
           try {
@@ -267,13 +274,14 @@ export async function editorPage(id) {
             renderPhotos();
           } catch (error) {
             document.querySelector("#photo-error").textContent = error.message;
-            b.disabled = false;
+            b.disabled = form.getAttribute("aria-busy") === "true";
           }
         }),
     );
   };
   renderPhotos();
   document.querySelector("#photos").onchange = (e) => {
+    if (form.getAttribute("aria-busy") === "true") return;
     try {
       const files = [...e.target.files];
       validateFiles([...pending, ...files], 200 - images.length);

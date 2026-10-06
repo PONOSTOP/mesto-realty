@@ -192,6 +192,10 @@ test("photo editor fetches threshold, hides land guidance and preserves batch su
   };
   const batchSizes = [];
   let failOnce = true;
+  let releaseSecondBatch;
+  const secondBatchGate = new Promise((resolve) => {
+    releaseSecondBatch = resolve;
+  });
   await page.route("**/api/properties/12/model", (route) =>
     route.fulfill({
       json: { model: { state: "needs_photos", minPhotos: 27, imageCount: 1 } },
@@ -210,6 +214,7 @@ test("photo editor fetches threshold, hides land guidance and preserves batch su
     ).length;
     batchSizes.push(count);
     if (batchSizes.length === 2 && failOnce) {
+      await secondBatchGate;
       failOnce = false;
       return route.fulfill({
         status: 400,
@@ -243,6 +248,21 @@ test("photo editor fetches threshold, hides land guidance and preserves batch su
   await page
     .getByRole("button", { name: "Сохранить черновик", exact: true })
     .click();
+  await page.waitForFunction(
+    () => document.querySelectorAll("[data-remove-image]").length === 11,
+  );
+  try {
+    assert.equal(await page.locator("[data-remove-image]:enabled").count(), 0);
+    assert.equal(
+      await page.locator("[data-remove-pending]:enabled").count(),
+      0,
+    );
+    // A synthetic event also must not mutate pending while the batch is in flight.
+    await page.locator("[data-remove-pending]").first().dispatchEvent("click");
+    assert.equal(await page.locator("[data-remove-pending]").count(), 15);
+  } finally {
+    releaseSecondBatch();
+  }
   await page.waitForFunction(() =>
     document
       .querySelector("#editor > .form-error")
@@ -251,6 +271,8 @@ test("photo editor fetches threshold, hides land guidance and preserves batch su
   assert.deepEqual(batchSizes, [10, 10]);
   assert.equal(await page.locator("[data-remove-image]").count(), 11);
   assert.equal(await page.locator("[data-remove-pending]").count(), 15);
+  assert.equal(await page.locator("[data-remove-image]:enabled").count(), 11);
+  assert.equal(await page.locator("[data-remove-pending]:enabled").count(), 15);
   await page
     .getByRole("button", { name: "Сохранить черновик", exact: true })
     .click();
