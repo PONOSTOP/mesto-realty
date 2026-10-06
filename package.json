@@ -12,12 +12,15 @@
     "start": "npm run db:migrate && node server/index.js",
     "db:migrate": "node server/migrate.js",
     "db:seed": "node scripts/seed.js",
-    "test": "node --test tests/validation.test.js tests/ui-security.test.js tests/assistant.test.js tests/catalog-assistant.test.js tests/seed-media.test.js",
-    "test:api": "node --test --test-concurrency=1 tests/migration.test.js tests/api.test.js tests/production.test.js tests/seed-recovery.test.js",
+    "test": "node --test tests/validation.test.js tests/ui-security.test.js tests/assistant.test.js tests/catalog-assistant.test.js tests/seed-media.test.js tests/room-model-ui.test.js tests/room-models.test.js",
+    "test:api": "node --test --test-concurrency=1 tests/migration.test.js tests/api.test.js tests/production.test.js tests/seed-recovery.test.js tests/room-models-api.test.js",
     "test:browser": "node --test tests/browser.test.js",
-    "format:check": "prettier --check public server scripts tests"
+    "format:check": "prettier --check public server scripts tests",
+    "build:room-viewer": "node scripts/build-room-viewer.js",
+    "test:room-browser": "node --test tests/room-model-browser.test.js"
   },
   "dependencies": {
+    "@mkkellogg/gaussian-splats-3d": "0.4.7",
     "bcrypt": "^6.0.0",
     "connect-pg-simple": "^10.0.0",
     "dotenv": "^18.0.5",
@@ -28,10 +31,12 @@
     "multer": "^2.4.0",
     "pg": "^8.23.1",
     "sharp": "^0.35.5",
+    "three": "0.170.0",
     "zod": "^4.6.5"
   },
   "devDependencies": {
     "@fontsource-variable/manrope": "^5.3.0",
+    "esbuild": "0.28.2",
     "playwright": "^1.63.0",
     "prettier": "^3.9.9",
     "supertest": "^7.3.0"

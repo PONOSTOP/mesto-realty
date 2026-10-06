@@ -249,7 +249,7 @@ test("browser: account, listing lifecycle, responsiveness and recovery", async (
         .click();
       await fillProperty();
       await page
-        .getByLabel("Добавьте до 10 фотографий")
+        .getByLabel("Добавьте до 200 фотографий")
         .setInputFiles([
           "public/assets/property-1.webp",
           "public/assets/property-2.webp",

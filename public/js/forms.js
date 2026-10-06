@@ -18,6 +18,7 @@ import {
   safeReturnPath,
   navigate,
 } from "./core.js";
+import { uploadPhotoBatches } from "./room-model.js";
 const main = document.querySelector("#main");
 export function authPage(mode) {
   const register = mode === "register";
@@ -190,15 +191,28 @@ export async function editorPage(id) {
     if (String(p.ownerId) !== String(state.user.id))
       throw new Error("Вы можете редактировать только свои объявления.");
   }
+  let minimumPhotos = 20;
+  if (id) {
+    try {
+      const status = await api(
+        "/properties/" + encodeURIComponent(id) + "/model",
+      );
+      if (Number.isInteger(status.model.minPhotos))
+        minimumPhotos = status.model.minPhotos;
+    } catch {
+      /* Photo editing remains available if the model status is unavailable. */
+    }
+  }
   let propertyId = id;
   let createOutcomeUnknown = false;
   let pending = [];
   let urls = [];
-  main.innerHTML = `<div class="container page"><div class="breadcrumb"><a href="/account">Кабинет компании</a> / ${id ? "Редактирование" : "Новое объявление"}</div><div class="page-intro"><h1>${id ? "Редактирование объекта" : "Разместить коммерческий объект"}</h1><p>${id ? "Обновите информацию и фотографии объявления." : "Предложите помещение или участок для бизнеса."}</p></div><form id="editor" class="form-sheet"><section class="form-section"><h2>Основное</h2><div class="form-grid">${select("deal", "Тип сделки", { sale: "Продажа", rent: "Аренда" }, p.deal)}${select("category", "Тип недвижимости", categories, p.category)}<div class="full">${field("title", "Заголовок объявления", p.title, 'required minlength="5" maxlength="120" placeholder="Офис 120 м² в деловом центре"')}</div>${field("price", "Цена, ₽", p.price, 'required type="number" min="1" max="999999999999" step="0.01"')}${field("area", "Площадь, м²", p.area, 'required type="number" min="0.01" max="99999999" step="0.01"')}${select("tax", "НДС", taxLabels, p.tax || "unspecified")}${select("parking", "Парковка", { false: "Нет", true: "Есть" }, String(!!p.parking))}</div></section><section class="form-section"><h2>Характеристики объекта</h2><p class="form-help">Необязательные параметры помогут компаниям оценить помещение.</p><div class="form-grid">${select("buildingClass", "Класс здания", { "": "Не указан", A: "A", B: "B", C: "C" }, p.buildingClass)}${field("floor", "Этаж", p.floor, 'type="number" min="-5" max="150" step="1"')}${field("ceilingHeight", "Высота потолков, м", p.ceilingHeight, 'type="number" min="0.01" max="50" step="0.01"')}${field("powerKw", "Мощность, кВт", p.powerKw, 'type="number" min="0.01" max="100000" step="0.01"')}</div></section><section class="form-section"><h2>Расположение</h2><div class="form-grid">${field("city", "Город", p.city, 'required minlength="2" maxlength="80" placeholder="Москва"')}${field("district", "Район", p.district, 'maxlength="100" placeholder="Необязательно"')}<div class="full">${field("address", "Адрес", p.address, 'required minlength="5" maxlength="200" placeholder="Улица, номер дома"')}</div></div></section><section class="form-section"><h2>Фотографии</h2><div class="upload"><label class="field">Добавьте до 10 фотографий<input id="photos" type="file" accept="image/jpeg,image/png,image/webp" multiple></label><p class="muted">JPEG, PNG или WebP, до 8 МБ каждое. Первое фото станет обложкой. Для публикации нужно хотя бы одно фото.</p></div><div id="photo-previews" class="preview-grid"></div><p id="photo-error" class="form-error" role="alert"></p></section><section class="form-section"><h2>О недвижимости</h2><label class="field">Описание<textarea name="description" required minlength="20" maxlength="10000" placeholder="Укажите планировку, доступ, инженерные системы и условия сделки. Не менее 20 символов.">${esc(p.description)}</textarea><span class="field-error" data-error="description"></span></label></section><section class="form-section"><h2>Контакты</h2><div class="form-grid">${field("contactName", "Контактное лицо", p.contactName, 'required minlength="2" maxlength="80" autocomplete="name"')}${field("contactPhone", "Телефон", p.contactPhone, 'required type="tel" autocomplete="tel" placeholder="+7 900 000-00-00"')}</div></section><div class="form-error" tabindex="-1" role="alert"></div><p id="save-progress" class="muted" aria-live="polite"></p><div class="form-actions"><button type="submit" class="button" name="intent" value="published">${p.status === "published" ? "Сохранить и опубликовать" : "Опубликовать"}</button><button type="submit" class="button secondary" name="intent" value="draft">Сохранить черновик</button><a class="button secondary" href="/account">В кабинет</a></div></form></div>`;
+  main.innerHTML = `<div class="container page"><div class="breadcrumb"><a href="/account">Кабинет компании</a> / ${id ? "Редактирование" : "Новое объявление"}</div><div class="page-intro"><h1>${id ? "Редактирование объекта" : "Разместить коммерческий объект"}</h1><p>${id ? "Обновите информацию и фотографии объявления." : "Предложите помещение или участок для бизнеса."}</p></div><form id="editor" class="form-sheet"><section class="form-section"><h2>Основное</h2><div class="form-grid">${select("deal", "Тип сделки", { sale: "Продажа", rent: "Аренда" }, p.deal)}${select("category", "Тип недвижимости", categories, p.category)}<div class="full">${field("title", "Заголовок объявления", p.title, 'required minlength="5" maxlength="120" placeholder="Офис 120 м² в деловом центре"')}</div>${field("price", "Цена, ₽", p.price, 'required type="number" min="1" max="999999999999" step="0.01"')}${field("area", "Площадь, м²", p.area, 'required type="number" min="0.01" max="99999999" step="0.01"')}${select("tax", "НДС", taxLabels, p.tax || "unspecified")}${select("parking", "Парковка", { false: "Нет", true: "Есть" }, String(!!p.parking))}</div></section><section class="form-section"><h2>Характеристики объекта</h2><p class="form-help">Необязательные параметры помогут компаниям оценить помещение.</p><div class="form-grid">${select("buildingClass", "Класс здания", { "": "Не указан", A: "A", B: "B", C: "C" }, p.buildingClass)}${field("floor", "Этаж", p.floor, 'type="number" min="-5" max="150" step="1"')}${field("ceilingHeight", "Высота потолков, м", p.ceilingHeight, 'type="number" min="0.01" max="50" step="0.01"')}${field("powerKw", "Мощность, кВт", p.powerKw, 'type="number" min="0.01" max="100000" step="0.01"')}</div></section><section class="form-section"><h2>Расположение</h2><div class="form-grid">${field("city", "Город", p.city, 'required minlength="2" maxlength="80" placeholder="Москва"')}${field("district", "Район", p.district, 'maxlength="100" placeholder="Необязательно"')}<div class="full">${field("address", "Адрес", p.address, 'required minlength="5" maxlength="200" placeholder="Улица, номер дома"')}</div></div></section><section class="form-section"><h2>Фотографии</h2><div class="upload"><label class="field">Добавьте до 200 фотографий<input id="photos" type="file" accept="image/jpeg,image/png,image/webp" multiple></label><p class="muted">JPEG, PNG или WebP, до 8 МБ каждое. Первое фото станет обложкой. Для публикации нужно хотя бы одно фото.</p></div><p id="room-photo-guidance" class="form-help">Для 3D-просмотра снимите одну комнату последовательно с разных точек: рекомендуем 30–100 резких фотографий с большим перекрытием ракурсов. Обработка запускается автоматически от ${minimumPhotos} фото. Количество снимков не гарантирует результат.</p><div id="photo-previews" class="preview-grid"></div><p id="photo-error" class="form-error" role="alert"></p></section><section class="form-section"><h2>О недвижимости</h2><label class="field">Описание<textarea name="description" required minlength="20" maxlength="10000" placeholder="Укажите планировку, доступ, инженерные системы и условия сделки. Не менее 20 символов.">${esc(p.description)}</textarea><span class="field-error" data-error="description"></span></label></section><section class="form-section"><h2>Контакты</h2><div class="form-grid">${field("contactName", "Контактное лицо", p.contactName, 'required minlength="2" maxlength="80" autocomplete="name"')}${field("contactPhone", "Телефон", p.contactPhone, 'required type="tel" autocomplete="tel" placeholder="+7 900 000-00-00"')}</div></section><div class="form-error" tabindex="-1" role="alert"></div><p id="save-progress" class="muted" aria-live="polite"></p><div class="form-actions"><button type="submit" class="button" name="intent" value="published">${p.status === "published" ? "Сохранить и опубликовать" : "Опубликовать"}</button><button type="submit" class="button secondary" name="intent" value="draft">Сохранить черновик</button><a class="button secondary" href="/account">В кабинет</a></div></form></div>`;
   const form = document.querySelector("#editor");
   const category = form.elements.category;
   const updateCharacteristics = () => {
     const land = category.value === "commercial_land";
+    form.querySelector("#room-photo-guidance").hidden = land;
     const logistics = ["warehouse", "industrial"].includes(category.value);
     for (const name of ["buildingClass", "floor", "ceilingHeight"]) {
       const input = form.elements[name];
@@ -262,7 +276,7 @@ export async function editorPage(id) {
   document.querySelector("#photos").onchange = (e) => {
     try {
       const files = [...e.target.files];
-      validateFiles([...pending, ...files], 10 - images.length);
+      validateFiles([...pending, ...files], 200 - images.length);
       pending.push(...files);
       renderPhotos();
       document.querySelector("#photo-error").textContent = "";
@@ -325,15 +339,19 @@ export async function editorPage(id) {
       if (pending.length) {
         progress.textContent = "Загружаем фотографии…";
         uploadStarted = true;
-        const data = new FormData();
-        pending.forEach((f) => data.append("images", f));
-        const uploaded = await api(
-          "/properties/" + encodeURIComponent(propertyId) + "/images",
-          { method: "POST", body: data },
+        await uploadPhotoBatches(
+          pending,
+          (data) =>
+            api("/properties/" + encodeURIComponent(propertyId) + "/images", {
+              method: "POST",
+              body: data,
+            }),
+          (uploaded) => {
+            images = uploaded.images;
+            renderPhotos();
+            progress.textContent = `Сохранено фотографий: ${images.length}. Осталось загрузить: ${pending.length}.`;
+          },
         );
-        pending = [];
-        images = uploaded.images;
-        renderPhotos();
         uploadStarted = false;
       }
       progress.textContent =
@@ -365,9 +383,6 @@ export async function editorPage(id) {
           const refreshed = await api(
             "/properties/" + encodeURIComponent(propertyId),
           );
-          if (refreshed.images.length > images.length) {
-            pending = [];
-          }
           images = refreshed.images;
           renderPhotos();
         } catch {

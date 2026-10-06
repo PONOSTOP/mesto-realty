@@ -1624,3 +1624,80 @@ footer {
     scroll-behavior: auto;
   }
 }
+/* The room viewer follows the listing's quiet, architectural presentation. */
+.room-model {
+  margin-top: 32px;
+  padding-top: 28px;
+  border-top: 1px solid var(--line, #deded7);
+}
+.room-model h2 {
+  margin-top: 0;
+}
+.room-model-status {
+  padding: 24px;
+  background: var(--paper, #f5f5f0);
+  border-radius: 12px;
+}
+.room-edit-link {
+  display: inline-block;
+  min-height: 44px;
+  padding-top: 10px;
+}
+.room-stage {
+  overflow: hidden;
+  border: 1px solid var(--line, #deded7);
+  border-radius: 12px;
+  background: var(--paper);
+}
+.room-canvas {
+  position: relative;
+  height: clamp(280px, 48vw, 520px);
+  min-height: 280px;
+  background: #242b29;
+  touch-action: none;
+}
+.room-canvas canvas {
+  display: block;
+  max-width: 100%;
+}
+.room-canvas:focus-visible {
+  outline: 3px solid var(--blue);
+  outline-offset: -3px;
+}
+.room-controls {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  padding: 16px 16px 0;
+}
+.room-controls .button {
+  min-height: 44px;
+}
+.room-help {
+  margin: 12px 16px 20px;
+  font-size: 14px;
+  line-height: 1.6;
+  color: var(--muted);
+}
+.room-stage:fullscreen {
+  border: 0;
+  border-radius: 0;
+  display: flex;
+  flex-direction: column;
+}
+.room-stage:fullscreen .room-canvas {
+  flex: 1;
+  height: auto;
+}
+#room-photo-guidance {
+  padding: 16px;
+  border-left: 3px solid var(--blue);
+  background: var(--paper);
+}
+.thumbnails {
+  overflow-x: auto;
+  max-width: 100%;
+}
+[hidden] {
+  display: none !important;
+}

@@ -1,0 +1,2 @@
+# Generated, pinned third-party browser bundle. Rebuild with npm run build:room-viewer.
+public/assets/vendor/room-viewer.js
