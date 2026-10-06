@@ -64,6 +64,23 @@ class WorkerTests(unittest.TestCase):
         self.assertIn('tensorboard', commands[1])
         self.assertEqual(commands[1][-7:], ['nerfstudio','--auto-scale-poses','False','--center-method','none','--orientation-method','none'])
 
+    def test_selects_largest_colmap_component_instead_of_first(self):
+        import struct
+        self.assertTrue(hasattr(w, 'best_colmap_model'), 'worker must select the largest COLMAP component')
+        with tempfile.TemporaryDirectory() as directory:
+            processed = Path(directory)
+            for name, cameras in [('0', 36), ('1', 60), ('2', 12)]:
+                model = processed/'colmap'/'sparse'/name
+                model.mkdir(parents=True)
+                (model/'images.bin').write_bytes(struct.pack('<Q', cameras))
+                (model/'cameras.bin').write_bytes(b'camera fixture')
+                (model/'points3D.bin').write_bytes(b'point fixture')
+            self.assertEqual(w.best_colmap_model(processed), Path('colmap/sparse/1'))
+            # Incomplete output must not override a complete reconstruction.
+            (processed/'colmap/sparse/2/images.bin').write_bytes(b'bad')
+            self.assertEqual(w.best_colmap_model(processed), Path('colmap/sparse/1'))
+            with self.assertRaises(ValueError): w.best_colmap_model(processed/'missing')
+
     def test_job_rejects_path_and_count(self):
         job = {'propertyId':1,'revision':2,'leaseToken':'12345678-1234-4234-8234-123456789abc','images':[{'id':1,'url':'/internal/room-models/1/images/1'}]}
         w.validate_job(job)

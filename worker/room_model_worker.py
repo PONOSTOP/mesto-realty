@@ -5,6 +5,7 @@ import os
 from pathlib import Path
 import signal
 import shutil
+import struct
 import subprocess
 import tempfile
 import threading
@@ -182,6 +183,24 @@ def camera_from_transforms(data):
     up = [x/norm(up) for x in up]
     return {'position':position,'target':[position[i]+forward[i] for i in range(3)],'up':up}
 
+def best_colmap_model(processed):
+    # COLMAP may emit disconnected components. Nerfstudio defaults to sparse/0,
+    # which is not necessarily the component with the most registered images.
+    best, best_count = None, 0
+    sparse = processed/'colmap'/'sparse'
+    candidates = [p for p in sparse.glob('*') if p.is_dir() and p.name.isdecimal()]
+    for model in sorted(candidates, key=lambda p: int(p.name)):
+        if not all((model/name).is_file() for name in ['cameras.bin','images.bin','points3D.bin']):
+            continue
+        with (model/'images.bin').open('rb') as file:
+            header = file.read(8)
+        if len(header) != 8: continue
+        count = struct.unpack('<Q', header)[0]
+        if best_count < count <= 200:
+            best, best_count = model.relative_to(processed), count
+    if best is None: raise ValueError('Missing COLMAP reconstruction')
+    return best
+
 def commands(root):
     return [
         ['ns-process-data','images','--data',str(root/'images'),'--output-dir',str(root/'processed'),'--matching-method','exhaustive'],
@@ -240,6 +259,11 @@ def process_job(client, job, timeout=3600):
                 path.unlink()
             preprocess, train = commands(root)
             lease.run(preprocess)
+            selected = best_colmap_model(root/'processed')
+            if selected != Path('colmap/sparse/0'):
+                selected_path = root/'processed'/selected
+                lease.run(['colmap','bundle_adjuster','--input_path',str(selected_path),'--output_path',str(selected_path),'--BundleAdjustment.refine_principal_point','1'])
+                lease.run(['ns-process-data','images','--data',str(root/'images'),'--output-dir',str(root/'processed'),'--skip-colmap','--skip-image-processing','--colmap-model-path',str(selected)])
             transforms = json.loads((root/'processed'/'transforms.json').read_text())
             # Dataset metadata can override CLI orientation; keep scene and camera
             # in the processed coordinate frame explicitly.
