@@ -3,7 +3,7 @@ import { test, before, after } from "node:test";
 import assert from "node:assert/strict";
 import request from "supertest";
 import sharp from "sharp";
-import { mkdtemp, rm } from "node:fs/promises";
+import { mkdtemp, rm, readdir } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 if (
@@ -185,6 +185,7 @@ test("automatic queue lifecycle, stale workers and public model visibility", asy
     .expect(200);
   const result = (await owner.get(base + "/model")).body.model;
   assert.equal(result.state, "ready");
+  assert.equal((await readdir(path.join(dir, "models"))).length, 1);
   assert.equal(result.minPhotos, 2);
   assert.deepEqual(result.camera, camera);
   assert.ok(!JSON.stringify(result).includes(job.leaseToken));
@@ -212,6 +213,7 @@ test("automatic queue lifecycle, stale workers and public model visibility", asy
     .set("X-CSRF-Token", token)
     .expect(204);
   await owner.get(result.url).expect(404);
+  assert.deepEqual(await readdir(path.join(dir, "models")), []);
   await pool.query(
     "UPDATE property_models SET available_at=now()-interval '1 minute' WHERE property_id=$1",
     [propertyId],
@@ -225,6 +227,59 @@ test("automatic queue lifecycle, stale workers and public model visibility", asy
   assert.notEqual(replacement.leaseToken, expiring.leaseToken);
   await internal("post", `/${propertyId}/heartbeat`)
     .send({ revision: expiring.revision, leaseToken: expiring.leaseToken })
+    .expect(409);
+  await internal("post", `/${propertyId}/fail`)
+    .send({
+      revision: replacement.revision,
+      leaseToken: replacement.leaseToken,
+      code: "reconstruction_failed",
+    })
+    .expect(200);
+  await pool.query(
+    "UPDATE property_models SET available_at=now()-interval '1 minute' WHERE property_id=$1",
+    [propertyId],
+  );
+  const lastAttempt = (await internal("post", "/claim").send({})).body.job;
+  assert.equal(lastAttempt.revision, replacement.revision);
+  await pool.query(
+    "UPDATE property_models SET lease_until=now()-interval '1 minute' WHERE property_id=$1",
+    [propertyId],
+  );
+  assert.equal((await internal("post", "/claim").send({})).body.job, null);
+  assert.equal((await owner.get(base + "/model")).body.model.state, "failed");
+  await owner
+    .post(base + "/images")
+    .set("X-CSRF-Token", token)
+    .attach("images", png, "retry.png")
+    .expect(201);
+  await pool.query(
+    "UPDATE property_models SET available_at=now()-interval '1 minute' WHERE property_id=$1",
+    [propertyId],
+  );
+  const concurrent = await Promise.all([
+    internal("post", "/claim").send({}),
+    internal("post", "/claim").send({}),
+  ]);
+  assert.equal(concurrent.filter((r) => r.body.job).length, 1);
+  const restarted = createApp();
+  try {
+    const persisted = await request(restarted.app)
+      .get(base + "/model")
+      .set("Cookie", (await owner.get(base)).headers["set-cookie"] || [])
+      .expect(200);
+    assert.equal(persisted.body.model.state, "processing");
+  } finally {
+    restarted.close();
+  }
+  const active = concurrent.find((r) => r.body.job).body.job;
+  await owner
+    .patch(base)
+    .set("X-CSRF-Token", token)
+    .send({ category: "commercial_land" })
+    .expect(200);
+  assert.equal((await owner.get(base + "/model")).body.model.state, "none");
+  await internal("post", `/${propertyId}/heartbeat`)
+    .send({ revision: active.revision, leaseToken: active.leaseToken })
     .expect(409);
   await owner.delete(base).set("X-CSRF-Token", token).expect(204);
   await internal("post", `/${propertyId}/heartbeat`)
