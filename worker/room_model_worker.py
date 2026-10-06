@@ -4,6 +4,7 @@ import math
 import os
 from pathlib import Path
 import signal
+import shutil
 import subprocess
 import tempfile
 import threading
@@ -16,6 +17,7 @@ import uuid
 IMAGE_LIMIT = 8 * 1024 * 1024
 SCENE_LIMIT = 100 * 1024 * 1024
 ACTIVE_PROCESSES = set()
+ACTIVE_TEMPORARY_DIRECTORIES = set()
 PROCESS_LOCK = threading.Lock()
 
 def stop_process(process):
@@ -30,7 +32,14 @@ def expire_task():
     # A hard watchdog also covers a slow HTTP peer. Docker restarts the worker;
     # the server reclaims the abandoned lease instead of accepting late output.
     with PROCESS_LOCK:
-        for process in ACTIVE_PROCESSES: stop_process(process)
+        for process in ACTIVE_PROCESSES:
+            stop_process(process)
+            process.wait(timeout=5)
+        for directory in ACTIVE_TEMPORARY_DIRECTORIES:
+            # Only exact, securely allocated job directories are registered.
+            # Never follow a replaced root symlink or delete a computed parent.
+            if directory.name.startswith('room-model-') and not directory.is_symlink():
+                shutil.rmtree(directory, ignore_errors=True)
     print('Room reconstruction reached its hard time limit', flush=True)
     os._exit(1)
 
@@ -118,6 +127,29 @@ def image_extension(header):
     if header.startswith(b'RIFF') and header[8:12] == b'WEBP': return '.webp'
     raise ValueError('Unsupported photograph')
 
+def convert_photograph(source, destination, max_pixels=40_000_000):
+    # Pillow ships in the pinned Nerfstudio image. Nerfstudio 1.1.5 does not
+    # discover WebP inputs, while the website stores processed images as WebP.
+    import warnings
+    from PIL import Image
+    if source.stat().st_size > IMAGE_LIMIT: raise ValueError('Photograph too large')
+    with source.open('rb') as data: image_extension(data.read(16))
+    Image.MAX_IMAGE_PIXELS = 40_000_000
+    try:
+        with warnings.catch_warnings():
+            warnings.simplefilter('error',Image.DecompressionBombWarning)
+            with Image.open(source) as image:
+                if image.width <= 0 or image.height <= 0 or image.width * image.height > min(max_pixels,40_000_000):
+                    raise ValueError('Photograph pixel limit exceeded')
+                if getattr(image,'n_frames',1) != 1: raise ValueError('Animated photograph is unsupported')
+                image.load()
+                with image.convert('RGB') as rgb:
+                    # 40 MP RGB bounds decoded storage and lossless PNG output.
+                    rgb.save(destination,format='PNG')
+    except Exception:
+        destination.unlink(missing_ok=True)
+        raise
+
 def validate_job(job):
     for key in ('propertyId','revision'):
         if type(job.get(key)) is not int or job[key] <= 0: raise ValueError('Invalid job identity')
@@ -198,13 +230,14 @@ def process_job(client, job, timeout=3600):
     try:
         with tempfile.TemporaryDirectory(prefix='room-model-') as directory:
             root = Path(directory)
+            with PROCESS_LOCK: ACTIVE_TEMPORARY_DIRECTORIES.add(root)
             (root/'images').mkdir()
             for index, image in enumerate(job['images']):
                 lease.check()
                 path = root/'images'/f'{index:04d}.download'
                 client.download(image['url'],path,job['revision'],job['leaseToken'])
-                with path.open('rb') as source: extension = image_extension(source.read(16))
-                path.rename(path.with_suffix(extension))
+                convert_photograph(path,path.with_suffix('.png'))
+                path.unlink()
             preprocess, train = commands(root)
             lease.run(preprocess)
             transforms = json.loads((root/'processed'/'transforms.json').read_text())
@@ -234,6 +267,8 @@ def process_job(client, job, timeout=3600):
         print('Room reconstruction failed', flush=True)
     finally:
         watchdog.cancel()
+        if 'root' in locals():
+            with PROCESS_LOCK: ACTIVE_TEMPORARY_DIRECTORIES.discard(root)
 
 def main():
     client = Client(os.environ['ROOM_MODEL_SITE_ORIGIN'],os.environ['ROOM_MODEL_WORKER_TOKEN'],os.environ.get('ROOM_MODEL_ALLOW_LOCAL_HTTP') == '1')

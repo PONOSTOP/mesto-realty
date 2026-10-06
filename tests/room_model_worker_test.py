@@ -34,6 +34,23 @@ class WorkerTests(unittest.TestCase):
         self.assertEqual(w.image_extension(b'\x89PNG\r\n\x1a\n'), '.png')
         with self.assertRaises(ValueError): w.image_extension(b'<html>')
 
+    def test_webp_converts_to_rgb_png_for_nerfstudio(self):
+        from PIL import Image
+        self.assertTrue(hasattr(w,'convert_photograph'), 'WebP conversion must exist')
+        with tempfile.TemporaryDirectory() as directory:
+            source = Path(directory)/'0000.download'
+            target = Path(directory)/'0000.png'
+            Image.new('RGBA',(3,2),(12,34,56,255)).save(source,format='WEBP',lossless=True)
+            w.convert_photograph(source,target)
+            with Image.open(target) as converted:
+                self.assertEqual(converted.format,'PNG')
+                self.assertEqual(converted.mode,'RGB')
+                self.assertEqual(converted.size,(3,2))
+                self.assertEqual(converted.getpixel((0,0)),(12,34,56))
+            with self.assertRaises(ValueError):
+                w.convert_photograph(source,Path(directory)/'oversized.png',max_pixels=5)
+            self.assertFalse((Path(directory)/'oversized.png').exists())
+
     def test_camera_opengl_axes_and_degenerate_rejection(self):
         camera = w.camera_from_transforms({'frames':[{'transform_matrix':[[1,0,0,2],[0,1,0,3],[0,0,1,4],[0,0,0,1]]}]})
         self.assertEqual(camera, {'position':[2.0,3.0,4.0], 'target':[2.0,3.0,3.0], 'up':[0.0,1.0,0.0]})
@@ -99,5 +116,22 @@ class WorkerTests(unittest.TestCase):
         with patch.object(lease,'check',check):
             with self.assertRaises(w.StaleJob):
                 lease.run([sys.executable,'-c','import time; time.sleep(30)'])
+
+    def test_hard_timeout_removes_only_registered_temporary_directory(self):
+        from unittest.mock import patch
+        self.assertTrue(hasattr(w,'ACTIVE_TEMPORARY_DIRECTORIES'))
+        with tempfile.TemporaryDirectory() as parent:
+            owned = Path(tempfile.mkdtemp(prefix='room-model-',dir=parent))
+            unrelated = Path(parent)/'unrelated'; unrelated.mkdir()
+            (owned/'large-output').write_bytes(b'training data')
+            w.ACTIVE_TEMPORARY_DIRECTORIES.add(owned)
+            try:
+                with patch.object(w.os,'_exit') as exit_process:
+                    w.expire_task()
+                exit_process.assert_called_once_with(1)
+                self.assertFalse(owned.exists())
+                self.assertTrue(unrelated.exists())
+            finally:
+                w.ACTIVE_TEMPORARY_DIRECTORIES.discard(owned)
 
 if __name__ == '__main__': unittest.main()
