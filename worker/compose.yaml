@@ -1,0 +1,19 @@
+services:
+  room-model-worker:
+    build: .
+    restart: unless-stopped
+    init: true
+    gpus: all
+    shm_size: 12gb
+    environment:
+      ROOM_MODEL_SITE_ORIGIN: ${ROOM_MODEL_SITE_ORIGIN:?Set the HTTPS site origin}
+      ROOM_MODEL_WORKER_TOKEN: ${ROOM_MODEL_WORKER_TOKEN:?Set the private worker token}
+      ROOM_MODEL_TASK_TIMEOUT_SECONDS: ${ROOM_MODEL_TASK_TIMEOUT_SECONDS:-3600}
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    volumes:
+      - room-worker-cache:/home/roomworker/.cache
+volumes:
+  room-worker-cache:
