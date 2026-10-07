@@ -10,7 +10,11 @@ import { config } from "./config.js";
 import { pool, transaction } from "./db.js";
 import { id } from "./validation.js";
 import { requireAuth, notFound } from "./security.js";
-import { analyzeFloorPlan } from "./architectural-analysis.js";
+import {
+  analyzeFloorPlan,
+  architecturalPrompt,
+} from "./architectural-analysis.js";
+import { architecturalJsonSchema } from "./architectural-json-schema.js";
 import { parseArchitecturalScene } from "../public/js/architectural-schema.js";
 import {
   architectureDir,
@@ -382,9 +386,97 @@ export function architecturalWorkerRouter({ analyze = analyzeFloorPlan } = {}) {
         propertyId: row.property_id,
         revision: row.revision,
         leaseToken: token,
+        dimensions: row.dimensions,
+        instructions: architecturalPrompt,
+        sceneSchema: architecturalJsonSchema(row.dimensions),
+        plan: { url: `/internal/architectural-models/${row.property_id}/plan` },
+        images: Array.from(
+          new Set([
+            row.image_ids[0],
+            row.image_ids[Math.floor(row.image_ids.length / 2)],
+            row.image_ids.at(-1),
+          ]),
+        )
+          .filter(Boolean)
+          .map((imageId) => ({
+            url: `/internal/architectural-models/${row.property_id}/photos/${imageId}`,
+          })),
       };
     });
     res.json({ job });
+  });
+  const downloadCredentials = (req) => ({
+    revision: Number(req.get("X-Room-Model-Revision")),
+    leaseToken: req.get("X-Room-Model-Lease"),
+  });
+  router.get("/:id/plan", async (req, res, next) => {
+    const row = await lease(pool, id(req.params.id), downloadCredentials(req));
+    if (!planPattern.test(row.plan_filename)) throw notFound();
+    res.type("image/webp");
+    res.sendFile(
+      row.plan_filename,
+      { root: plansDir, dotfiles: "deny" },
+      (err) => {
+        if (err) next(err);
+      },
+    );
+  });
+  router.get("/:id/photos/:imageId", async (req, res, next) => {
+    const propertyId = id(req.params.id),
+      row = await lease(pool, propertyId, downloadCredentials(req)),
+      imageId = id(req.params.imageId);
+    if (!row.image_ids.includes(imageId)) throw notFound();
+    const image = (
+      await pool.query(
+        "SELECT filename FROM property_images WHERE property_id=$1 AND id=$2",
+        [propertyId, imageId],
+      )
+    ).rows[0];
+    if (!image || !planPattern.test(image.filename)) throw notFound();
+    res.type("image/webp");
+    res.sendFile(
+      image.filename,
+      { root: config.uploadDir, dotfiles: "deny" },
+      (err) => {
+        if (err) next(err);
+      },
+    );
+  });
+  router.post("/:id/complete", async (req, res) => {
+    const propertyId = id(req.params.id),
+      c = parse(credentials, req.body),
+      row = await lease(pool, propertyId, c);
+    let scene;
+    try {
+      scene = parseArchitecturalScene(req.body.scene, row.dimensions);
+    } catch {
+      return res
+        .status(422)
+        .json({ error: "Некорректная геометрия", code: "invalid_layout" });
+    }
+    const filename = randomUUID() + ".json";
+    await ensureArchitecturalDirectories();
+    await writeFile(
+      path.join(architectureDir, filename),
+      JSON.stringify(scene),
+      { flag: "wx" },
+    );
+    let previous;
+    try {
+      await transaction(async (client) => {
+        const current = await lease(client, propertyId, c, true);
+        previous = current.previous_filename;
+        await client.query(
+          "UPDATE architectural_models SET state='ready',filename=$2,previous_filename=NULL,warnings=$3,error_code=NULL,lease_token=NULL,lease_until=NULL,updated_at=now() WHERE property_id=$1",
+          [propertyId, filename, JSON.stringify(scene.warnings)],
+        );
+      });
+    } catch (err) {
+      await removeArchitecturalFiles({ models: [filename] });
+      throw err;
+    }
+    await removeArchitecturalFiles({ models: [previous] });
+    res.json({ ok: true });
   });
   router.post("/:id/heartbeat", async (req, res) => {
     await transaction(async (client) => {

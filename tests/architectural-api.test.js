@@ -188,6 +188,33 @@ test("plan and dimension inputs trigger automatic architecture, stale leases fai
   analysisGate = null;
   analysisStarted = null;
   assert.equal((await owner.get(base)).body.model.state, "queued");
+  const local = (await worker("/claim").send({}).expect(200)).body.job;
+  assert.deepEqual(local.dimensions, { width: 6, depth: 4, height: 3 });
+  assert.ok(local.instructions.includes("floor plan"));
+  assert.ok(local.sceneSchema.anyOf);
+  await request(app).get(local.plan.url).expect(401);
+  const localGet = (url) =>
+    request(app)
+      .get(url)
+      .set("Authorization", "Bearer " + process.env.ROOM_MODEL_WORKER_TOKEN)
+      .set("X-Room-Model-Revision", String(local.revision))
+      .set("X-Room-Model-Lease", local.leaseToken);
+  await localGet(local.plan.url).expect(200);
+  await localGet(local.images[0].url).expect(200);
+  await worker("/" + propertyId + "/complete")
+    .send({ ...local, scene: { ...scene, width: 7 } })
+    .expect(422);
+  assert.equal((await owner.get(base)).body.model.state, "processing");
+  await worker("/" + propertyId + "/complete")
+    .send({ ...local, scene })
+    .expect(200);
+  const localReady = (await request(app).get(base)).body.model;
+  assert.equal(localReady.state, "ready");
+  assert.deepEqual(
+    (await request(app).get(localReady.url).expect(200)).body,
+    scene,
+  );
+  await localGet(local.plan.url).expect(409);
   await auth("delete", base + "/plan").expect(200);
   await request(app).get(model.url).expect(404);
 });

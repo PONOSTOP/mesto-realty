@@ -99,12 +99,13 @@ export function createApp({ assistant, architecture } = {}) {
       },
     }),
   );
-  app.use(express.json({ limit: "100kb", strict: true }));
-  app.use("/internal/room-models", roomModelWorkerRouter());
   app.use(
     "/internal/architectural-models",
+    express.json({ limit: "1100kb", strict: true }),
     architecturalWorkerRouter(architecture),
   );
+  app.use(express.json({ limit: "100kb", strict: true }));
+  app.use("/internal/room-models", roomModelWorkerRouter());
   app.use("/api", (req, res, next) => {
     res.set("Cache-Control", "no-store");
     next();

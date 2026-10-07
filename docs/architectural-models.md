@@ -1,0 +1,22 @@
+# Architectural models
+
+The active property viewer now displays white architectural geometry with an open-roof overview and interior navigation. It replaces the previous photo splat viewer. Geometry is generated automatically from an uploaded floor-plan image, photographs and overall width/depth/ceiling height in metres. Furniture dimensions without measurements remain approximate.
+
+Owners add the plan and dimensions in the property editor. PNG, JPEG and WebP plans are accepted up to 8 MB. At least one photograph is needed. Successful photo batches are saved before architectural inputs; publishing then exposes the ready model to all visitors. Saving a failed model retries it. Land listings do not show architectural inputs.
+
+The installed worker uses local GPU vision through Ollama and a separately cached image-language model. It downloads only leased input images, extracts geometry and sends validated JSON back to the website. It no longer starts Gaussian training. The PC and Docker must remain running for new jobs. The local inference service has no published network port and never receives the website Bearer token.
+
+Without `ROOM_MODEL_LOCAL_VISION_URL`, the worker retains server-side cloud analysis. The existing `AI_API_KEY`, `AI_MODEL`, `AI_BASE_URL` must then identify a provider that accepts image content and JSON output through `/chat/completions`; credentials remain on the website. Cloud analysis returned HTTP429 during deployment, so the installed setup uses local inference.
+
+Restart the installed worker from the repository root:
+
+```powershell
+docker compose --project-directory worker -f worker/compose.yaml up -d --build
+docker compose --project-directory worker -f worker/compose.yaml exec room-model-vision ollama pull qwen2.5vl:3b
+```
+
+Keep the Dockhost persistent disk mounted at `/app/uploads` (or `UPLOAD_DIR`). Photos, sanitized plans under `plans/`, and JSON models under `architecture/` use that disk. Database migrations add separate inputs and jobs without removing legacy artifacts.
+
+The server validates every scene against dimensions, object counts and allowed fields before persistence. Input changes invalidate leased revisions; expired or obsolete completions cannot publish. Published models are public; draft models require ownership. Jobs have three bounded attempts, five-minute renewable leases, one-hour hard deadlines, and bounded image/provider responses.
+
+Validation commands: `npm test`, `npm run test:api`, `npm run test:architecture-browser`, and `python -m unittest discover -s tests -p '*worker_test.py'` in the worker image. Browser tests use known synthetic geometry; they do not establish the accuracy of a supplied real floor plan.
