@@ -79,6 +79,27 @@ test("provider failures and unreadable plans expose safe categories", async () =
       model: "vision",
       baseUrl: "https://provider.example/v1",
       fetchImpl: async () =>
+        new Response(
+          JSON.stringify({
+            error: {
+              code: "insufficient_quota",
+              message: "SECRET billing details",
+            },
+          }),
+          { status: 429 },
+        ),
+    }),
+    (e) =>
+      e.diagnostic === "http_429" &&
+      e.providerCode === "insufficient_quota" &&
+      !e.message.includes("SECRET"),
+  );
+  await assert.rejects(
+    analyzeFloorPlan(input, {
+      apiKey: "secret",
+      model: "vision",
+      baseUrl: "https://provider.example/v1",
+      fetchImpl: async () =>
         new Response("SECRET provider failure", { status: 503 }),
     }),
     (e) =>

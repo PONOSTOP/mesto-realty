@@ -2,7 +2,7 @@ import {
   parseArchitecturalScene,
   furnitureKinds,
 } from "../public/js/architectural-schema.js";
-const failure = (code, diagnostic) =>
+const failure = (code, diagnostic, providerCode) =>
   Object.assign(
     new Error(
       {
@@ -16,6 +16,7 @@ const failure = (code, diagnostic) =>
     {
       code,
       ...(diagnostic ? { diagnostic } : {}),
+      ...(providerCode ? { providerCode } : {}),
       status:
         code === "provider_unavailable" || code === "vision_unavailable"
           ? 503
@@ -121,13 +122,44 @@ export async function analyzeFloorPlan(
       error.name === "TimeoutError" ? "timeout" : "request_failed",
     );
   }
-  if (!response.ok)
+  if (!response.ok) {
+    // Only documented categorical codes are retained, never provider messages.
+    let providerCode;
+    try {
+      const reader = response.body.getReader();
+      let chunks = [],
+        size = 0;
+      while (true) {
+        const next = await reader.read();
+        if (next.done) break;
+        size += next.value.length;
+        if (size > 4096) {
+          await reader.cancel();
+          break;
+        }
+        chunks.push(Buffer.from(next.value));
+      }
+      if (size <= 4096) {
+        const value = JSON.parse(Buffer.concat(chunks).toString());
+        const known = new Set([
+          "insufficient_quota",
+          "rate_limit_exceeded",
+          "billing_hard_limit_reached",
+          "quota_exceeded",
+          "too_many_requests",
+        ]);
+        const candidate = value.error?.code || value.error?.type;
+        if (known.has(candidate)) providerCode = candidate;
+      }
+    } catch {}
     throw failure(
       response.status === 400 || response.status === 404
         ? "vision_unavailable"
         : "provider_unavailable",
       "http_" + response.status,
+      providerCode,
     );
+  }
   const declared = Number(response.headers.get("content-length") || 0);
   if (declared > 2 * 1024 * 1024) throw failure("invalid_layout");
   let data;

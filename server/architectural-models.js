@@ -496,6 +496,15 @@ export function architecturalWorkerRouter({ analyze = analyzeFloorPlan } = {}) {
             ? "Планировка не читается. Загрузите чёткое изображение"
             : "Не удалось создать модель. Проверьте исходные данные или повторите позже.",
         code,
+        ...([
+          "insufficient_quota",
+          "rate_limit_exceeded",
+          "billing_hard_limit_reached",
+          "quota_exceeded",
+          "too_many_requests",
+        ].includes(err.providerCode)
+          ? { providerCode: err.providerCode }
+          : {}),
         ...(/^(http_[1-5]\d\d|timeout|request_failed)$/.test(
           err.diagnostic || "",
         )
