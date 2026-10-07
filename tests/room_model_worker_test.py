@@ -105,6 +105,9 @@ class WorkerTests(unittest.TestCase):
         client.json('/internal/room-models/claim', {})
         self.assertGreaterEqual(observed[0], 1800)
         self.assertEqual(observed[1], 30)
+        with tempfile.TemporaryDirectory() as directory:
+            client.download('/internal/room-models/1/images/1',Path(directory)/'image',1,'lease')
+        self.assertEqual(observed[2], 120)
 
     def test_stale_http_stops_work(self):
         from urllib.error import HTTPError

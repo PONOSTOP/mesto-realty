@@ -90,7 +90,7 @@ class Client:
             return json.loads(data)
 
     def download(self, path, destination, revision, lease_token):
-        with self.request(path, extra_headers={'X-Room-Model-Revision':str(revision),'X-Room-Model-Lease':lease_token}) as response:
+        with self.request(path, extra_headers={'X-Room-Model-Revision':str(revision),'X-Room-Model-Lease':lease_token}, timeout=120) as response:
             copy_bounded(response, destination, IMAGE_LIMIT)
 
     def complete(self, path, fields, scene):
