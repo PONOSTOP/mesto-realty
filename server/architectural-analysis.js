@@ -2,7 +2,7 @@ import {
   parseArchitecturalScene,
   furnitureKinds,
 } from "../public/js/architectural-schema.js";
-const failure = (code) =>
+const failure = (code, diagnostic) =>
   Object.assign(
     new Error(
       {
@@ -15,6 +15,7 @@ const failure = (code) =>
     ),
     {
       code,
+      ...(diagnostic ? { diagnostic } : {}),
       status:
         code === "provider_unavailable" || code === "vision_unavailable"
           ? 503
@@ -114,14 +115,18 @@ export async function analyzeFloorPlan(
         signal: AbortSignal.timeout(210000),
       },
     );
-  } catch {
-    throw failure("provider_unavailable");
+  } catch (error) {
+    throw failure(
+      "provider_unavailable",
+      error.name === "TimeoutError" ? "timeout" : "request_failed",
+    );
   }
   if (!response.ok)
     throw failure(
       response.status === 400 || response.status === 404
         ? "vision_unavailable"
         : "provider_unavailable",
+      "http_" + response.status,
     );
   const declared = Number(response.headers.get("content-length") || 0);
   if (declared > 2 * 1024 * 1024) throw failure("invalid_layout");

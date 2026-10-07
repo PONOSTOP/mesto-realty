@@ -81,7 +81,10 @@ test("provider failures and unreadable plans expose safe categories", async () =
       fetchImpl: async () =>
         new Response("SECRET provider failure", { status: 503 }),
     }),
-    (e) => e.code === "provider_unavailable" && !e.message.includes("SECRET"),
+    (e) =>
+      e.code === "provider_unavailable" &&
+      e.diagnostic === "http_503" &&
+      !e.message.includes("SECRET"),
   );
   await assert.rejects(
     analyzeFloorPlan(input, {

@@ -490,15 +490,18 @@ export function architecturalWorkerRouter({ analyze = analyzeFloorPlan } = {}) {
       } catch (failure) {
         if (failure.status !== 409) throw failure;
       }
-      res
-        .status(err.status === 422 ? 422 : 503)
-        .json({
-          error:
-            code === "unreadable_plan"
-              ? "Планировка не читается. Загрузите чёткое изображение"
-              : "Не удалось создать модель. Проверьте исходные данные или повторите позже.",
-          code,
-        });
+      res.status(err.status === 422 ? 422 : 503).json({
+        error:
+          code === "unreadable_plan"
+            ? "Планировка не читается. Загрузите чёткое изображение"
+            : "Не удалось создать модель. Проверьте исходные данные или повторите позже.",
+        code,
+        ...(/^(http_[1-5]\d\d|timeout|request_failed)$/.test(
+          err.diagnostic || "",
+        )
+          ? { diagnostic: err.diagnostic }
+          : {}),
+      });
     } finally {
       inflight.delete(key);
     }
