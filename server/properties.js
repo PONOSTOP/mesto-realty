@@ -12,6 +12,7 @@ import {
 } from "./property-data.js";
 import { removeFiles } from "./uploads.js";
 import { queueRoomModel, removeModelFiles } from "./room-models.js";
+import { removeArchitecturalFiles } from "./architectural-store.js";
 
 const propertyKeys = [
   "title",
@@ -236,6 +237,7 @@ export function propertiesRouter() {
   });
   router.delete("/properties/:id", requireAuth, async (req, res) => {
     let modelFile;
+    let architecturalFiles;
     const files = await transaction(async (client) => {
       const current = await owned(
         client,
@@ -254,11 +256,28 @@ export function propertiesRouter() {
           [current.id],
         )
       ).rows[0]?.filename;
+      const architectural = (
+        await client.query(
+          "SELECT filename,previous_filename FROM architectural_models WHERE property_id=$1 FOR UPDATE",
+          [current.id],
+        )
+      ).rows[0];
+      const plan = (
+        await client.query(
+          "SELECT plan_filename FROM architectural_inputs WHERE property_id=$1",
+          [current.id],
+        )
+      ).rows[0];
+      architecturalFiles = {
+        models: [architectural?.filename, architectural?.previous_filename],
+        plans: [plan?.plan_filename],
+      };
       await client.query("DELETE FROM properties WHERE id=$1", [current.id]);
       return images.map((i) => i.filename);
     });
     await removeFiles(files);
     await removeModelFiles([modelFile]);
+    await removeArchitecturalFiles(architecturalFiles);
     res.sendStatus(204);
   });
   return router;

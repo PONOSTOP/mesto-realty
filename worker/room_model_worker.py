@@ -66,7 +66,7 @@ class Client:
 
     def url(self, path):
         parsed = urlsplit(path)
-        if parsed.scheme or parsed.netloc or parsed.fragment or not parsed.path.startswith('/internal/room-models/') or '\\' in path or any(p in ('.','..') for p in parsed.path.split('/')):
+        if parsed.scheme or parsed.netloc or parsed.fragment or not parsed.path.startswith(('/internal/room-models/','/internal/architectural-models/')) or '\\' in path or any(p in ('.','..') for p in parsed.path.split('/')):
             raise ValueError('Only internal relative API paths are permitted')
         return urljoin(self.origin, path)
 
@@ -84,8 +84,8 @@ class Client:
             # Never include URLs, tokens or response bodies in logs.
             raise RuntimeError('Internal API request failed') from None
 
-    def json(self, path, body):
-        with self.request(path, json.dumps(body).encode(), 'application/json') as response:
+    def json(self, path, body, timeout=30):
+        with self.request(path, json.dumps(body).encode(), 'application/json', timeout=timeout) as response:
             data = response.read(1024 * 1024 + 1)
             if len(data) > 1024 * 1024: raise ValueError('API response too large')
             return json.loads(data)
@@ -370,13 +370,50 @@ def process_job(client, job, timeout=3600):
         if 'root' in locals():
             with PROCESS_LOCK: ACTIVE_TEMPORARY_DIRECTORIES.discard(root)
 
+def process_architectural_job(client, job, timeout=3600):
+    if not isinstance(job, dict) or not isinstance(job.get('propertyId'), int) or job['propertyId'] <= 0 or not isinstance(job.get('revision'), int) or job['revision'] <= 0:
+        raise ValueError('Invalid architectural job')
+    uuid.UUID(job['leaseToken'])
+    lease = Lease(client, job, timeout)
+    lease.path = '/internal/architectural-models/' + str(job['propertyId'])
+    stopped = threading.Event()
+    failures = []
+    watchdog = threading.Timer(min(3600, max(60, timeout)), expire_task)
+    watchdog.daemon = True
+    watchdog.start()
+    def renew():
+        while not stopped.wait(1):
+            try: lease.check()
+            except Exception as error:
+                failures.append(error)
+                return
+    heartbeat = threading.Thread(target=renew, daemon=True)
+    try:
+        lease.check()
+        heartbeat.start()
+        client.json(lease.path+'/analyze', lease.body, timeout=240)
+        if failures: raise failures[0]
+    except StaleJob:
+        pass
+    except Exception:
+        # Server records known provider/validation errors itself. A late fail
+        # after completed analysis is rejected by the revision/lease check.
+        try: client.json(lease.path+'/fail',{**lease.body,'code':'processing_failed'})
+        except StaleJob: pass
+        except Exception: print('Failure notification unavailable',flush=True)
+        print('Architectural analysis failed',flush=True)
+    finally:
+        stopped.set()
+        if heartbeat.is_alive(): heartbeat.join(timeout=95)
+        watchdog.cancel()
+
 def main():
     client = Client(os.environ['ROOM_MODEL_SITE_ORIGIN'],os.environ['ROOM_MODEL_WORKER_TOKEN'],os.environ.get('ROOM_MODEL_ALLOW_LOCAL_HTTP') == '1')
     timeout = min(3600, max(60, int(os.environ.get('ROOM_MODEL_TASK_TIMEOUT_SECONDS','3600'))))
     while True:
         try:
-            job = client.json('/internal/room-models/claim',{}).get('job')
-            if job: process_job(client,job,timeout)
+            job = client.json('/internal/architectural-models/claim',{}).get('job')
+            if job: process_architectural_job(client,job,timeout)
             else: time.sleep(10)
         except KeyboardInterrupt: return
         except Exception:

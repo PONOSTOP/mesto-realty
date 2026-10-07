@@ -9,6 +9,7 @@ import { config } from "./config.js";
 import { pool, transaction } from "./db.js";
 import { id } from "./validation.js";
 import { notFound } from "./security.js";
+import { queueArchitecturalModel } from "./architectural-store.js";
 import {
   MAX_SCENE_BYTES,
   validateSceneFile,
@@ -46,6 +47,7 @@ export async function removeModelFiles(names) {
 }
 // Called while the property row is locked, in the same transaction as image mutation.
 export async function queueRoomModel(client, propertyId) {
+  await queueArchitecturalModel(client, propertyId);
   const images = (
     await client.query(
       "SELECT id FROM property_images WHERE property_id=$1 ORDER BY position,id",
