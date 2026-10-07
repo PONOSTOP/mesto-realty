@@ -142,6 +142,11 @@ export function buildArchitecturalGeometry(scene) {
     color: 0xf8f8f5,
     roughness: 0.78,
   });
+  const ceilingMaterial = new THREE.MeshStandardMaterial({
+    color: 0xf8f8f5,
+    roughness: 0.78,
+    side: THREE.BackSide,
+  });
   const fabric = new THREE.MeshStandardMaterial({
     color: 0xe7e5e0,
     roughness: 0.95,
@@ -188,7 +193,7 @@ export function buildArchitecturalGeometry(scene) {
     mesh.name = "floor-" + i;
     mesh.receiveShadow = true;
     group.add(mesh);
-    const ceiling = new THREE.Mesh(geometry, white);
+    const ceiling = new THREE.Mesh(geometry, ceilingMaterial);
     ceiling.position.y = scene.height;
     ceilings.add(ceiling);
   });

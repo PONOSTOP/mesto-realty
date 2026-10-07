@@ -213,3 +213,15 @@ test("many staggered openings do not multiply wall meshes into a full grid", () 
   );
   assert.ok(Math.abs(area - 585) < 0.001);
 });
+
+test("inside ceiling is visible from below", () => {
+  const model = buildArchitecturalGeometry(plan);
+  const ceilings = model.getObjectByName("ceilings");
+  ceilings.visible = true;
+  model.updateMatrixWorld(true);
+  const ray = new THREE.Raycaster(
+    new THREE.Vector3(2, 1.65, 2),
+    new THREE.Vector3(0, 1, 0),
+  );
+  assert.ok(ray.intersectObject(ceilings, true).length > 0);
+});
