@@ -67,7 +67,16 @@ export function architecturalJsonSchema({ width, depth, height }) {
       }),
       300,
     ),
-    warnings: list({ type: "string", maxLength: 300 }, 20),
+    warnings: list(
+      {
+        type: "string",
+        enum: [
+          "Размеры мебели приблизительные",
+          "Часть деталей не удалось определить по исходным данным",
+        ],
+      },
+      2,
+    ),
   });
   return { anyOf: [scene, obj({ error: { const: "unreadable_plan" } })] };
 }

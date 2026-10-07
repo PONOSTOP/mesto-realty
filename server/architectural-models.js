@@ -379,7 +379,7 @@ export function architecturalWorkerRouter({ analyze = analyzeFloorPlan } = {}) {
       if (!row) return null;
       const token = randomUUID();
       await client.query(
-        "UPDATE architectural_models SET state='processing',attempts=attempts+1,lease_token=$2,lease_until=now()+interval '5 minutes',started_at=now(),updated_at=now() WHERE property_id=$1",
+        "UPDATE architectural_models SET state='processing',error_code=NULL,attempts=attempts+1,lease_token=$2,lease_until=now()+interval '5 minutes',started_at=now(),updated_at=now() WHERE property_id=$1",
         [row.property_id, token],
       );
       return {

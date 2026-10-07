@@ -12,7 +12,7 @@ Restart the installed worker from the repository root:
 
 ```powershell
 docker compose --project-directory worker -f worker/compose.yaml up -d --build
-docker compose --project-directory worker -f worker/compose.yaml exec room-model-vision ollama pull qwen2.5vl:3b
+docker compose --project-directory worker -f worker/compose.yaml exec room-model-vision ollama pull qwen3-vl:4b
 ```
 
 Keep the Dockhost persistent disk mounted at `/app/uploads` (or `UPLOAD_DIR`). Photos, sanitized plans under `plans/`, and JSON models under `architecture/` use that disk. Database migrations add separate inputs and jobs without removing legacy artifacts.
