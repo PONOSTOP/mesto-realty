@@ -57,6 +57,11 @@ class APIError(RuntimeError):
         self.status = status
         self.code = code
 
+class LocalVisionError(RuntimeError):
+    def __init__(self, retryable=False):
+        super().__init__('Local vision request failed')
+        self.retryable = retryable
+
 class NoRedirect(HTTPRedirectHandler):
     def redirect_request(self, req, fp, code, msg, headers, newurl):
         raise ValueError('Redirects are forbidden')
@@ -431,8 +436,17 @@ class LocalVision:
                 if len(raw) > 2 * 1024 * 1024: raise ValueError('Local vision response too large')
                 response_value = json.loads(raw)
         except HTTPError as error:
+            retryable = error.code == 429 or 500 <= error.code <= 599
             error.close()
-            raise RuntimeError('Local vision unavailable') from None
+            raise LocalVisionError(retryable) from None
+        except TimeoutError:
+            raise TimeoutError('Local vision request timed out') from None
+        except URLError as error:
+            if isinstance(error.reason,TimeoutError):
+                raise TimeoutError('Local vision request timed out') from None
+            raise LocalVisionError(True) from None
+        except (ConnectionError,ssl.SSLError):
+            raise LocalVisionError(True) from None
         if not isinstance(response_value,dict) or response_value.get('error') or response_value.get('done') is not True:
             raise RuntimeError('Local vision unavailable')
         content = response_value.get('message',{}).get('content')
@@ -559,6 +573,8 @@ def process_architectural_job(client, job, timeout=3600):
         # Server records known provider/validation errors itself. A late fail
         # after completed analysis is rejected by the revision/lease check.
         if failures and isinstance(failures[0],StaleJob): return
+        if isinstance(error,LocalVisionError):
+            code = 'processing_failed' if error.retryable else 'vision_unavailable'
         if isinstance(error,TimeoutError): code = 'processing_timeout'
         try: client.json(lease.path+'/fail',{**lease.body,'code':code})
         except StaleJob: pass

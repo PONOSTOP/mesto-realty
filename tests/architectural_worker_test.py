@@ -110,6 +110,36 @@ class ArchitectureWorkerTests(unittest.TestCase):
         self.assertTrue(any(path.endswith('/fail') and body['code']=='vision_unavailable' for path,body,_ in site.calls))
         self.assertEqual(geometry_calls,[])
 
+    def test_local_transient_failure_reports_retryable_code(self):
+        from urllib.error import HTTPError,URLError
+        for error in [HTTPError('private',503,'private message',{},io.BytesIO(b'private body')),HTTPError('private',429,'private message',{},io.BytesIO()),URLError('private details'),ConnectionError('private details')]:
+            with self.subTest(error=type(error).__name__):
+                site,_=self.local_fake([])
+                class Vision(w.LocalVision):
+                    def __init__(self,*args):
+                        super().__init__(*args)
+                        class Opener:
+                            def open(self,*args,**kwargs): raise error
+                        self.opener=Opener()
+                with patch.dict(os.environ,{'ROOM_MODEL_LOCAL_VISION_URL':'http://room-model-vision:11434'}),patch.object(w,'LocalVision',Vision):
+                    w.process_architectural_job(site,self.job())
+                self.assertTrue(any(path.endswith('/fail') and body['code']=='processing_failed' for path,body,_ in site.calls))
+
+    def test_local_missing_model_is_final_and_timeout_is_retryable_timeout(self):
+        from urllib.error import HTTPError
+        for error,code in [(HTTPError('private',404,'private',{},io.BytesIO()),'vision_unavailable'),(HTTPError('private',400,'private',{},io.BytesIO()),'vision_unavailable'),(TimeoutError('private'),'processing_timeout')]:
+            with self.subTest(code=code):
+                site,_=self.local_fake([])
+                class Vision(w.LocalVision):
+                    def __init__(self,*args):
+                        super().__init__(*args)
+                        class Opener:
+                            def open(self,*args,**kwargs): raise error
+                        self.opener=Opener()
+                with patch.dict(os.environ,{'ROOM_MODEL_LOCAL_VISION_URL':'http://room-model-vision:11434'}),patch.object(w,'LocalVision',Vision):
+                    w.process_architectural_job(site,self.job())
+                self.assertTrue(any(path.endswith('/fail') and body['code']==code for path,body,_ in site.calls))
+
     def test_local_invalid_json_retries_once_and_completes(self):
         self.assertTrue(hasattr(w,'LocalVision'))
         site,vision=self.local_fake([ValueError('invalid JSON'),{'walls':[]}])
