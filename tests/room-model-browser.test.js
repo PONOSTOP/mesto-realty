@@ -65,7 +65,7 @@ before(async () => {
     requests.push(req.url);
     res.setHeader(
       "Content-Security-Policy",
-      "default-src 'self'; script-src 'self' 'wasm-unsafe-eval'; worker-src 'self' blob:; style-src 'self' 'unsafe-inline'; img-src 'self' blob:; connect-src 'self'",
+      "default-src 'self'; script-src 'self' 'wasm-unsafe-eval'; worker-src 'self' blob:; style-src 'self'; img-src 'self' blob:; connect-src 'self'",
     );
     if (req.url === "/") {
       res.setHeader("Content-Type", "text/html; charset=utf-8");
@@ -96,7 +96,7 @@ before(async () => {
       return res.end(fixturePly());
     }
     if (
-      /^\/(js\/(core|room-model|forms)\.js|styles\.css|assets\/vendor\/room-viewer\.js|assets\/manrope(-latin)?\.woff2)$/.test(
+      /^\/(js\/(core|room-model|forms)\.js|styles\.css|assets\/vendor\/room-viewer\.(js|css)|assets\/manrope(-latin)?\.woff2)$/.test(
         req.url,
       )
     ) {
@@ -139,6 +139,13 @@ test("local PLY viewer opens lazily, supports controls, mobile and disposal unde
     viewport: { width: 1280, height: 900 },
   });
   page.on("pageerror", (error) => pageErrors.push(error.message));
+  page.on("console", (message) => {
+    if (
+      message.type() === "error" &&
+      message.text().includes("Content Security Policy")
+    )
+      pageErrors.push(message.text());
+  });
   await page.goto(base);
   await page.getByRole("button", { name: "Открыть 3D-просмотр" }).waitFor();
   assert.equal(requests.includes("/assets/vendor/room-viewer.js"), false);

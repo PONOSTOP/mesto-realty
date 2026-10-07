@@ -22,7 +22,30 @@ await build({
         builder.onLoad(
           { filter: /gaussian-splats-3d\.module\.js$/ },
           async (args) => {
-            const source = await readFile(args.path, "utf8");
+            let source = await readFile(args.path, "utf8");
+            // Externalize helper styles for strict CSP. A listing has one
+            // viewer, so stable helper classes do not need instance suffixes.
+            source = source.replaceAll("${this.elementID}", "");
+            const helperStyles = [];
+            source = source.replace(
+              /style\.innerHTML = (`[\s\S]*?`);/g,
+              (_, css) => {
+                helperStyles.push(css.slice(1, -1));
+                return "style.rel = 'stylesheet'; style.href = '/assets/vendor/room-viewer.css';";
+              },
+            );
+            if (helperStyles.length !== 3)
+              throw new Error(
+                "Review viewer style patch for the new upstream version",
+              );
+            source = source.replaceAll(
+              "document.createElement('style')",
+              "document.createElement('link')",
+            );
+            await writeFile(
+              new URL("room-viewer.css", directory),
+              helperStyles.join("\n"),
+            );
             const original = "document.body.removeChild(this.rootElement);";
             if (!source.includes(original))
               throw new Error(

@@ -81,6 +81,22 @@ class WorkerTests(unittest.TestCase):
             self.assertEqual(w.best_colmap_model(processed), Path('colmap/sparse/1'))
             with self.assertRaises(ValueError): w.best_colmap_model(processed/'missing')
 
+    def test_compact_export_preserves_rendered_attributes_byte_for_byte(self):
+        import struct
+        self.assertTrue(hasattr(w,'compact_scene'))
+        fields=['x','y','z','nx','ny','nz','f_dc_0','f_dc_1','f_dc_2','f_rest_0','f_rest_1','opacity','scale_0','scale_1','scale_2','rot_0','rot_1','rot_2','rot_3']
+        kept=[name for name in fields if not name.startswith('f_rest_') and name not in ('nx','ny','nz')]
+        rows=[list(range(len(fields))),list(range(30,30+len(fields)))]
+        with tempfile.TemporaryDirectory() as directory:
+            scene=Path(directory)/'scene.ply'
+            header='ply\nformat binary_little_endian 1.0\nelement vertex 2\n'+''.join('property float '+name+'\n' for name in fields)+'end_header\n'
+            scene.write_bytes(header.encode()+b''.join(struct.pack('<'+str(len(fields))+'f',*row) for row in rows))
+            w.compact_scene(scene)
+            data=scene.read_bytes()
+            header,payload=data.split(b'end_header\n',1)
+            self.assertNotIn(b'f_rest_',header)
+            self.assertEqual(payload,b''.join(struct.pack('<'+str(len(kept))+'f',*[row[fields.index(name)] for name in kept]) for row in rows))
+
     def test_job_rejects_path_and_count(self):
         job = {'propertyId':1,'revision':2,'leaseToken':'12345678-1234-4234-8234-123456789abc','images':[{'id':1,'url':'/internal/room-models/1/images/1'}]}
         w.validate_job(job)
@@ -115,6 +131,21 @@ class WorkerTests(unittest.TestCase):
             def open(self, *args, **kwargs): raise HTTPError('url',409,'stale',{},None)
         c = w.Client('https://example.org','secret'); c.opener = Opener()
         with self.assertRaises(w.StaleJob): c.json('/internal/room-models/claim', {})
+
+    def test_completion_retries_tls_failure_without_restarting_training(self):
+        import io
+        from urllib.error import URLError
+        class Opener:
+            calls = 0
+            def open(self, *args, **kwargs):
+                self.calls += 1
+                if self.calls < 3: raise URLError('Connection reset')
+                return io.BytesIO(b'{}')
+        client=w.Client('https://example.org','secret'); client.opener=Opener()
+        with tempfile.TemporaryDirectory() as directory:
+            scene=Path(directory)/'scene.ply'; scene.write_bytes(b'ply\nformat binary_little_endian 1.0\n')
+            client.complete('/internal/room-models/1/complete',{'revision':1},scene)
+        self.assertEqual(client.opener.calls,3)
 
     def test_download_retries_transient_tls_connection_failure(self):
         import io
@@ -165,6 +196,7 @@ class WorkerTests(unittest.TestCase):
                 if not renewed.wait(2): raise AssertionError('Upload must renew its lease')
         job = {'propertyId':1,'revision':2,'leaseToken':'lease'}
         lease = w.Lease(Client(),job,60)
+        lease.next_heartbeat = w.time.monotonic() + 0.05
         self.assertTrue(hasattr(lease,'complete'), 'Completion must keep its lease alive')
         lease.complete({'position':[0,0,1]},Path('scene.ply'))
 

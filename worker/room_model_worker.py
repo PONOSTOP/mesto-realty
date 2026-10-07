@@ -114,8 +114,15 @@ class Client:
         parts.extend([scene.read_bytes(), f'\r\n--{boundary}--\r\n'.encode()])
         # Large scenes can take minutes over a residential uplink. The job's
         # hard watchdog and heartbeats still bound work and protect its lease.
-        with self.request(path, b''.join(parts), 'multipart/form-data; boundary=' + boundary, timeout=1800) as response:
-            response.read(4096)
+        payload = b''.join(parts)
+        for attempt in range(3):
+            try:
+                with self.request(path, payload, 'multipart/form-data; boundary=' + boundary, timeout=1800) as response:
+                    response.read(4096)
+                return
+            except (URLError, TimeoutError, ssl.SSLError, ConnectionError):
+                if attempt == 2: raise
+                time.sleep(attempt + 1)
 
 def copy_bounded(source, destination, limit):
     try:
@@ -210,6 +217,38 @@ def best_colmap_model(processed):
     if best is None: raise ValueError('Missing COLMAP reconstruction')
     return best
 
+def compact_scene(scene):
+    # The web viewer renders degree-zero SH. Preserve its scalar attributes
+    # byte-for-byte, omitting unused higher-order SH and normal coefficients.
+    with scene.open('rb') as source:
+        lines = []
+        while sum(map(len, lines)) < 16384:
+            line = source.readline()
+            if not line: raise ValueError('Incomplete PLY header')
+            lines.append(line)
+            if line == b'end_header\n': break
+        else: raise ValueError('PLY header too large')
+        if lines[:2] != [b'ply\n', b'format binary_little_endian 1.0\n']: raise ValueError('Unsupported PLY')
+        fields = [line.decode().strip().split()[-1] for line in lines if line.startswith(b'property float ')]
+        count = int(next(line for line in lines if line.startswith(b'element vertex ')).split()[-1])
+        payload = source.read(SCENE_LIMIT + 1)
+    stride = len(fields) * 4
+    if not stride or len(payload) != count * stride or len(payload) > SCENE_LIMIT: raise ValueError('Invalid PLY payload')
+    kept = [index for index, name in enumerate(fields) if not name.startswith('f_rest_') and name not in ('nx','ny','nz')]
+    output = bytearray(count * len(kept) * 4)
+    position = 0
+    view = memoryview(payload)
+    for offset in range(0, len(payload), stride):
+        for index in kept:
+            output[position:position+4] = view[offset+index*4:offset+index*4+4]
+            position += 4
+    header = b''.join(line for line in lines if not line.startswith(b'property float ') or line.decode().strip().split()[-1] in [fields[index] for index in kept])
+    replacement = scene.with_suffix('.compact')
+    with replacement.open('wb') as target:
+        target.write(header)
+        target.write(output)
+    replacement.replace(scene)
+
 def commands(root):
     return [
         ['ns-process-data','images','--data',str(root/'images'),'--output-dir',str(root/'processed'),'--matching-method','exhaustive'],
@@ -254,7 +293,9 @@ class Lease:
             if failures: raise failures[0]
         finally:
             stopped.set()
-            heartbeat.join(timeout=1)
+            # A heartbeat has three 30-second attempts plus bounded backoff.
+            # Finish that request before advancing to another job.
+            heartbeat.join(timeout=95)
 
     def run(self, command):
         self.check()
@@ -314,6 +355,7 @@ def process_job(client, job, timeout=3600):
             lease.run(['ns-export','gaussian-splat','--load-config',str(configs[0]),'--output-dir',str(root/'export')])
             scenes = list((root/'export').glob('*.ply'))
             if len(scenes) != 1: raise ValueError('Missing unique exported scene')
+            compact_scene(scenes[0])
             lease.check()
             lease.complete(camera,scenes[0])
     except StaleJob:
