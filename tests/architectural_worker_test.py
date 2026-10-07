@@ -45,12 +45,13 @@ class ArchitectureWorkerTests(unittest.TestCase):
             def log_message(self,*args): pass
         server=HTTPServer(('127.0.0.1',0),Handler); thread=threading.Thread(target=server.serve_forever,daemon=True);thread.start()
         try:
-            scene=w.LocalVision(f'http://127.0.0.1:{server.server_port}','qwen2.5vl:3b').analyze(self.job(),['plan','photo'])
+            scene=w.LocalVision(f'http://127.0.0.1:{server.server_port}','qwen2.5vl:3b').analyze(self.job(),['plan'],appearance={'furnitureKinds':['sofa']})
             self.assertEqual(scene,{'walls':[]});self.assertNotIn('Authorization',captured['headers'])
             body=captured['body'];self.assertEqual(body['format'],self.job()['sceneSchema'])
-            self.assertFalse(body['stream']);self.assertEqual(body['keep_alive'],0)
+            self.assertFalse(body['stream']);self.assertEqual(body['keep_alive'],'5m');self.assertFalse(body['think'])
             self.assertEqual(body['options'],{'temperature':0,'num_ctx':8192,'num_predict':6000})
-            self.assertEqual(body['messages'][1]['images'],['plan','photo'])
+            self.assertEqual(body['messages'][1]['images'],['plan'])
+            self.assertIn('sofa',body['messages'][1]['content'])
             self.assertEqual(captured['path'],'/api/chat')
         finally: server.shutdown();server.server_close();thread.join()
 
@@ -63,12 +64,51 @@ class ArchitectureWorkerTests(unittest.TestCase):
                 Image.new('RGB',(4,4),(20,30,40)).save(destination,format='PNG')
         class Vision:
             def __init__(self,*args): self.calls=[]
-            def analyze(self,job,images,feedback=None):
+            def appearance(self,images): return {'furnitureKinds':['sofa']}
+            def analyze(self,job,images,feedback=None,appearance=None):
                 self.calls.append(feedback)
                 output=outputs.pop(0)
                 if isinstance(output,Exception): raise output
                 return output
         return Site(),Vision
+
+    def test_photo_appearance_is_classification_only_and_deduplicated(self):
+        self.assertTrue(hasattr(w.LocalVision,'appearance'),'Photo appearance stage must exist')
+        captured={}
+        class Opener:
+            def open(self,request,timeout):
+                captured.update(json.loads(request.data));captured['timeout']=timeout
+                return io.BytesIO(json.dumps({'message':{'content':json.dumps({'furnitureKinds':['sofa','shoe','sofa','table']})},'done':True}).encode())
+        vision=w.LocalVision('http://localhost:11434','model');vision.opener=Opener()
+        self.assertEqual(vision.appearance(['photo1','photo2']),{'furnitureKinds':['sofa','table']})
+        self.assertEqual(captured['options'],{'temperature':0,'num_ctx':4096,'num_predict':128})
+        self.assertFalse(captured['think']);self.assertEqual(captured['keep_alive'],'5m')
+        self.assertEqual(captured['messages'][1]['images'],['photo1','photo2'])
+        schema=captured['format'];self.assertEqual(list(schema['properties']),['furnitureKinds'])
+        self.assertFalse(schema['additionalProperties']);self.assertEqual(schema['properties']['furnitureKinds']['maxItems'],11)
+
+    def test_geometry_retries_keep_only_plan_and_same_appearance(self):
+        site,base=self.local_fake([]);captures=[];classified=[]
+        class Vision(base):
+            def appearance(self,images): classified.append(images);return {'furnitureKinds':['sofa']}
+            def analyze(self,job,images,feedback=None,appearance=None):
+                captures.append((images,feedback,appearance))
+                if len(captures)==1: raise ValueError('retry')
+                return {'walls':[]}
+        with patch.dict(os.environ,{'ROOM_MODEL_LOCAL_VISION_URL':'http://room-model-vision:11434'}),patch.object(w,'LocalVision',Vision),patch.object(w,'vision_image',side_effect=['PLAN','PHOTO']):
+            w.process_architectural_job(site,self.job())
+        self.assertEqual(classified,[['PHOTO']])
+        self.assertEqual(captures,[(['PLAN'],False,{'furnitureKinds':['sofa']}),(['PLAN'],True,{'furnitureKinds':['sofa']})])
+
+    def test_photo_provider_failure_does_not_fabricate_geometry(self):
+        site,base=self.local_fake([]);geometry_calls=[]
+        class Vision(base):
+            def appearance(self,images): raise RuntimeError('Provider unavailable')
+            def analyze(self,*args,**kwargs): geometry_calls.append(True);return {'walls':[]}
+        with patch.dict(os.environ,{'ROOM_MODEL_LOCAL_VISION_URL':'http://room-model-vision:11434'}),patch.object(w,'LocalVision',Vision):
+            w.process_architectural_job(site,self.job())
+        self.assertTrue(any(path.endswith('/fail') and body['code']=='vision_unavailable' for path,body,_ in site.calls))
+        self.assertEqual(geometry_calls,[])
 
     def test_local_invalid_json_retries_once_and_completes(self):
         self.assertTrue(hasattr(w,'LocalVision'))
