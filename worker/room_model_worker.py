@@ -1,5 +1,7 @@
 """Sequential, leased Nerfstudio worker. No third-party HTTP dependencies."""
 import json
+import base64
+import io
 import math
 import os
 from pathlib import Path
@@ -13,7 +15,7 @@ import threading
 import time
 from urllib.error import HTTPError, URLError
 from urllib.parse import urlsplit, urljoin
-from urllib.request import Request, build_opener, HTTPRedirectHandler
+from urllib.request import Request, build_opener, HTTPRedirectHandler, ProxyHandler
 import uuid
 
 IMAGE_LIMIT = 8 * 1024 * 1024
@@ -48,6 +50,12 @@ def expire_task():
 class StaleJob(Exception):
     pass
 
+class APIError(RuntimeError):
+    def __init__(self, status, code=None):
+        super().__init__('Internal API request failed')
+        self.status = status
+        self.code = code
+
 class NoRedirect(HTTPRedirectHandler):
     def redirect_request(self, req, fp, code, msg, headers, newurl):
         raise ValueError('Redirects are forbidden')
@@ -79,10 +87,19 @@ class Client:
             return self.opener.open(req, timeout=timeout)
         except HTTPError as error:
             status = error.code
+            if status == 409:
+                error.close()
+                raise StaleJob() from None
+            code = None
+            try:
+                value = json.loads(error.read(4096))
+                if value.get('code') in ('unreadable_plan','invalid_layout','provider_unavailable','processing_failed'):
+                    code = value['code']
+            except (ValueError,AttributeError,TypeError):
+                pass
             error.close()
-            if status == 409: raise StaleJob() from None
             # Never include URLs, tokens or response bodies in logs.
-            raise RuntimeError('Internal API request failed') from None
+            raise APIError(status,code) from None
 
     def json(self, path, body, timeout=30):
         with self.request(path, json.dumps(body).encode(), 'application/json', timeout=timeout) as response:
@@ -370,10 +387,86 @@ def process_job(client, job, timeout=3600):
         if 'root' in locals():
             with PROCESS_LOCK: ACTIVE_TEMPORARY_DIRECTORIES.discard(root)
 
-def process_architectural_job(client, job, timeout=3600):
+def vision_image(source, size):
+    import warnings
+    from PIL import Image,ImageOps
+    if source.stat().st_size > IMAGE_LIMIT: raise ValueError('Photograph too large')
+    with source.open('rb') as data: image_extension(data.read(16))
+    Image.MAX_IMAGE_PIXELS = 40_000_000
+    with warnings.catch_warnings():
+        warnings.simplefilter('error',Image.DecompressionBombWarning)
+        with Image.open(source) as image:
+            if image.width <= 0 or image.height <= 0 or image.width * image.height > 40_000_000 or getattr(image,'n_frames',1) != 1:
+                raise ValueError('Invalid vision image')
+            image.load()
+            with ImageOps.exif_transpose(image) as oriented:
+                oriented.thumbnail((size,size),Image.Resampling.LANCZOS)
+                with oriented.convert('RGB') as rgb:
+                    output = io.BytesIO()
+                    rgb.save(output,format='JPEG',quality=90)
+                    return base64.b64encode(output.getvalue()).decode('ascii')
+
+class LocalVision:
+    def __init__(self, origin, model):
+        parsed = urlsplit(origin)
+        if parsed.scheme != 'http' or parsed.hostname not in ('room-model-vision','localhost','127.0.0.1','::1') or parsed.username or parsed.password or parsed.path not in ('','/') or parsed.query or parsed.fragment:
+            raise ValueError('Only local Ollama HTTP origins are permitted')
+        # The Docker service has one fixed port; loopback permits test ports.
+        if parsed.hostname == 'room-model-vision' and parsed.port != 11434:
+            raise ValueError('Unexpected Ollama service port')
+        if not isinstance(model,str) or not model or len(model) > 128 or any(c in model for c in '\r\n'):
+            raise ValueError('Invalid local vision model')
+        self.url = origin.rstrip('/') + '/api/chat'
+        self.model = model
+        self.opener = build_opener(ProxyHandler({}),NoRedirect())
+
+    def analyze(self, job, images, feedback=None):
+        content = 'First image is the actual floor plan. Following images are room photographs. Authoritative dimensions in metres: ' + json.dumps(job['dimensions'],allow_nan=False) + '. Extract the actual layout, not the example. Return only JSON matching the supplied schema.'
+        if feedback:
+            content += ' Previous result failed validation. Regenerate from the same plan; use valid JSON, exact supplied dimensions, valid wall references, non-overlapping openings and objects within the footprint.'
+        payload = {'model':self.model,'stream':False,'format':job['sceneSchema'],'messages':[{'role':'system','content':job['instructions']},{'role':'user','content':content,'images':images}],'options':{'temperature':0,'num_ctx':8192,'num_predict':6000},'keep_alive':0}
+        # Separate opener and headers: site Bearer credentials never reach Ollama.
+        request = Request(self.url,data=json.dumps(payload,allow_nan=False).encode(),headers={'Content-Type':'application/json'})
+        try:
+            with self.opener.open(request,timeout=900) as response:
+                raw = response.read(2 * 1024 * 1024 + 1)
+                if len(raw) > 2 * 1024 * 1024: raise ValueError('Local vision response too large')
+                response_value = json.loads(raw)
+        except HTTPError as error:
+            error.close()
+            raise RuntimeError('Local vision unavailable') from None
+        if not isinstance(response_value,dict) or response_value.get('error') or response_value.get('done') is not True:
+            raise RuntimeError('Local vision unavailable')
+        content = response_value.get('message',{}).get('content')
+        if not isinstance(content,str): raise ValueError('Missing local vision JSON')
+        scene = json.loads(content)
+        if not isinstance(scene,dict): raise ValueError('Expected scene object')
+        # Reject nonfinite JSON extensions before serializing to the site.
+        if len(json.dumps(scene,allow_nan=False).encode()) > 1024 * 1024:
+            raise ValueError('Local scene too large')
+        return scene
+
+def validate_architectural_job(job, local=False):
     if not isinstance(job, dict) or not isinstance(job.get('propertyId'), int) or job['propertyId'] <= 0 or not isinstance(job.get('revision'), int) or job['revision'] <= 0:
         raise ValueError('Invalid architectural job')
+    if type(job['propertyId']) is not int or type(job['revision']) is not int: raise ValueError('Invalid architectural identity')
     uuid.UUID(job['leaseToken'])
+    if not local: return
+    path = '/internal/architectural-models/' + str(job['propertyId'])
+    if not isinstance(job.get('dimensions'),dict) or not isinstance(job.get('instructions'),str) or not job['instructions'] or len(job['instructions']) > 65536 or not isinstance(job.get('sceneSchema'),dict):
+        raise ValueError('Invalid local analysis contract')
+    if not isinstance(job.get('plan'),dict) or job['plan'].get('url') != path+'/plan':
+        raise ValueError('Invalid plan route')
+    images = job.get('images',[])
+    if not isinstance(images,list) or len(images) > 3: raise ValueError('Invalid representative image count')
+    for image in images:
+        url = image.get('url') if isinstance(image,dict) else None
+        suffix = url[len(path+'/photos/'):] if isinstance(url,str) and url.startswith(path+'/photos/') else ''
+        if not suffix.isascii() or not suffix.isdecimal() or int(suffix) <= 0: raise ValueError('Invalid representative image route')
+
+def process_architectural_job(client, job, timeout=3600):
+    local_origin = os.environ.get('ROOM_MODEL_LOCAL_VISION_URL','').strip()
+    validate_architectural_job(job,bool(local_origin))
     lease = Lease(client, job, timeout)
     lease.path = '/internal/architectural-models/' + str(job['propertyId'])
     stopped = threading.Event()
@@ -388,17 +481,61 @@ def process_architectural_job(client, job, timeout=3600):
                 failures.append(error)
                 return
     heartbeat = threading.Thread(target=renew, daemon=True)
+    code = 'processing_failed'
+    root = None
+    def check_current():
+        if failures: raise failures[0]
+        if time.monotonic() >= lease.deadline: raise TimeoutError('Task time limit reached')
     try:
         lease.check()
         heartbeat.start()
-        client.json(lease.path+'/analyze', lease.body, timeout=240)
-        if failures: raise failures[0]
+        if not local_origin:
+            client.json(lease.path+'/analyze', lease.body, timeout=240)
+            check_current()
+        else:
+            vision = LocalVision(local_origin,os.environ.get('ROOM_MODEL_LOCAL_VISION_MODEL','qwen2.5vl:3b'))
+            with tempfile.TemporaryDirectory(prefix='room-model-') as directory:
+                root = Path(directory)
+                with PROCESS_LOCK: ACTIVE_TEMPORARY_DIRECTORIES.add(root)
+                encoded_images = []
+                for index, image in enumerate([job['plan']] + job.get('images',[])[:2]):
+                    check_current()
+                    destination = root/f'{index:04d}.download'
+                    client.download(image['url'],destination,job['revision'],job['leaseToken'])
+                    encoded_images.append(vision_image(destination,1600 if index == 0 else 768))
+                    destination.unlink()
+                    check_current()
+                for attempt in range(2):
+                    try:
+                        code = 'vision_unavailable'
+                        scene = vision.analyze(job,encoded_images,feedback=(attempt > 0))
+                        check_current()
+                        if scene.get('error') == 'unreadable_plan':
+                            code = 'unreadable_plan'
+                            raise RuntimeError('Unreadable plan')
+                        code = 'invalid_layout'
+                        client.json(lease.path+'/complete',{**lease.body,'scene':scene},timeout=120)
+                        check_current()
+                        break
+                    except ValueError:
+                        code = 'invalid_layout'
+                        check_current()
+                        if attempt == 1: raise
+                    except APIError as error:
+                        check_current()
+                        if error.code == 'unreadable_plan':
+                            code = 'unreadable_plan'
+                            raise
+                        if error.status != 422 or attempt == 1: raise
+                        code = 'invalid_layout'
     except StaleJob:
         pass
-    except Exception:
+    except Exception as error:
         # Server records known provider/validation errors itself. A late fail
         # after completed analysis is rejected by the revision/lease check.
-        try: client.json(lease.path+'/fail',{**lease.body,'code':'processing_failed'})
+        if failures and isinstance(failures[0],StaleJob): return
+        if isinstance(error,TimeoutError): code = 'processing_timeout'
+        try: client.json(lease.path+'/fail',{**lease.body,'code':code})
         except StaleJob: pass
         except Exception: print('Failure notification unavailable',flush=True)
         print('Architectural analysis failed',flush=True)
@@ -406,6 +543,8 @@ def process_architectural_job(client, job, timeout=3600):
         stopped.set()
         if heartbeat.is_alive(): heartbeat.join(timeout=95)
         watchdog.cancel()
+        if root is not None:
+            with PROCESS_LOCK: ACTIVE_TEMPORARY_DIRECTORIES.discard(root)
 
 def main():
     client = Client(os.environ['ROOM_MODEL_SITE_ORIGIN'],os.environ['ROOM_MODEL_WORKER_TOKEN'],os.environ.get('ROOM_MODEL_ALLOW_LOCAL_HTTP') == '1')

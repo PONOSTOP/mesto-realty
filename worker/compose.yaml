@@ -5,15 +5,29 @@ services:
     init: true
     gpus: all
     shm_size: 12gb
+    depends_on:
+      - room-model-vision
     environment:
       ROOM_MODEL_SITE_ORIGIN: ${ROOM_MODEL_SITE_ORIGIN:?Set the HTTPS site origin}
       ROOM_MODEL_WORKER_TOKEN: ${ROOM_MODEL_WORKER_TOKEN:?Set the private worker token}
       ROOM_MODEL_TASK_TIMEOUT_SECONDS: ${ROOM_MODEL_TASK_TIMEOUT_SECONDS:-3600}
+      ROOM_MODEL_LOCAL_VISION_URL: ${ROOM_MODEL_LOCAL_VISION_URL:-http://room-model-vision:11434}
+      ROOM_MODEL_LOCAL_VISION_MODEL: ${ROOM_MODEL_LOCAL_VISION_MODEL:-qwen2.5vl:3b}
     security_opt:
       - no-new-privileges:true
     cap_drop:
       - ALL
     volumes:
       - room-worker-cache:/home/roomworker/.cache
+  room-model-vision:
+    image: ollama/ollama:latest
+    restart: unless-stopped
+    gpus: all
+    environment:
+      OLLAMA_MAX_LOADED_MODELS: '1'
+      OLLAMA_NUM_PARALLEL: '1'
+    volumes:
+      - vision-models:/root/.ollama
 volumes:
   room-worker-cache:
+  vision-models:
