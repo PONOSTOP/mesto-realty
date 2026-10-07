@@ -529,7 +529,7 @@ def process_architectural_job(client, job, timeout=3600):
             client.json(lease.path+'/analyze', lease.body, timeout=240)
             check_current()
         else:
-            vision = LocalVision(local_origin,os.environ.get('ROOM_MODEL_LOCAL_VISION_MODEL','qwen2.5vl:3b'))
+            vision = LocalVision(local_origin,os.environ.get('ROOM_MODEL_LOCAL_VISION_MODEL','qwen3-vl:4b-instruct'))
             with tempfile.TemporaryDirectory(prefix='room-model-') as directory:
                 root = Path(directory)
                 with PROCESS_LOCK: ACTIVE_TEMPORARY_DIRECTORIES.add(root)

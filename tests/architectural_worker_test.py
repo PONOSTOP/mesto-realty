@@ -72,6 +72,15 @@ class ArchitectureWorkerTests(unittest.TestCase):
                 return output
         return Site(),Vision
 
+    def test_default_model_is_explicit_instruct_variant(self):
+        site,base=self.local_fake([{'walls':[]}]);models=[]
+        class Vision(base):
+            def __init__(self,origin,model): models.append(model);super().__init__(origin,model)
+        with patch.dict(os.environ,{'ROOM_MODEL_LOCAL_VISION_URL':'http://room-model-vision:11434'}),patch.object(w,'LocalVision',Vision):
+            os.environ.pop('ROOM_MODEL_LOCAL_VISION_MODEL',None)
+            w.process_architectural_job(site,self.job())
+        self.assertEqual(models,['qwen3-vl:4b-instruct'])
+
     def test_photo_appearance_is_classification_only_and_deduplicated(self):
         self.assertTrue(hasattr(w.LocalVision,'appearance'),'Photo appearance stage must exist')
         captured={}

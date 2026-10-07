@@ -11,9 +11,12 @@ Without `ROOM_MODEL_LOCAL_VISION_URL`, the worker retains server-side cloud anal
 Restart the installed worker from the repository root:
 
 ```powershell
-docker compose --project-directory worker -f worker/compose.yaml up -d --build
-docker compose --project-directory worker -f worker/compose.yaml exec room-model-vision ollama pull qwen3-vl:4b
+docker compose --project-directory worker -f worker/compose.yaml up -d room-model-vision
+docker compose --project-directory worker -f worker/compose.yaml exec room-model-vision ollama pull qwen3-vl:4b-instruct
+docker compose --project-directory worker -f worker/compose.yaml up -d --build room-model-worker
 ```
+
+The default is explicitly `qwen3-vl:4b-instruct`. Replace an existing `ROOM_MODEL_LOCAL_VISION_MODEL=qwen3-vl:4b` override with that tag, or remove the override to use the default. The [official tags](https://ollama.com/library/qwen3-vl/tags) identify `4b` as the same model as `4b-thinking`; that variant consumed the short appearance output budget on hidden reasoning during the live probe despite `think:false`. Pull the instruct model before starting the worker. Photo classification and plan geometry are separate requests; only the plan image enters geometry generation.
 
 Keep the Dockhost persistent disk mounted at `/app/uploads` (or `UPLOAD_DIR`). Photos, sanitized plans under `plans/`, and JSON models under `architecture/` use that disk. Database migrations add separate inputs and jobs without removing legacy artifacts.
 
