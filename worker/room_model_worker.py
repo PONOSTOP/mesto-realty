@@ -4,13 +4,14 @@ import math
 import os
 from pathlib import Path
 import signal
+import ssl
 import shutil
 import struct
 import subprocess
 import tempfile
 import threading
 import time
-from urllib.error import HTTPError
+from urllib.error import HTTPError, URLError
 from urllib.parse import urlsplit, urljoin
 from urllib.request import Request, build_opener, HTTPRedirectHandler
 import uuid
@@ -90,8 +91,14 @@ class Client:
             return json.loads(data)
 
     def download(self, path, destination, revision, lease_token):
-        with self.request(path, extra_headers={'X-Room-Model-Revision':str(revision),'X-Room-Model-Lease':lease_token}, timeout=120) as response:
-            copy_bounded(response, destination, IMAGE_LIMIT)
+        for attempt in range(3):
+            try:
+                with self.request(path, extra_headers={'X-Room-Model-Revision':str(revision),'X-Room-Model-Lease':lease_token}, timeout=120) as response:
+                    copy_bounded(response, destination, IMAGE_LIMIT)
+                return
+            except (URLError, TimeoutError, ssl.SSLError, ConnectionError):
+                if attempt == 2: raise
+                time.sleep(attempt + 1)
 
     def complete(self, path, fields, scene):
         if scene.stat().st_size > SCENE_LIMIT: raise ValueError('Scene too large')

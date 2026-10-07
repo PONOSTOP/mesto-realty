@@ -116,6 +116,24 @@ class WorkerTests(unittest.TestCase):
         c = w.Client('https://example.org','secret'); c.opener = Opener()
         with self.assertRaises(w.StaleJob): c.json('/internal/room-models/claim', {})
 
+    def test_download_retries_transient_tls_connection_failure(self):
+        import io
+        import ssl
+        from urllib.error import URLError
+        class Opener:
+            calls = 0
+            def open(self, *args, **kwargs):
+                self.calls += 1
+                if self.calls < 3: raise URLError(ssl.SSLEOFError('TLS connection closed'))
+                return io.BytesIO(b'image bytes')
+        client = w.Client('https://example.org', 'secret')
+        client.opener = Opener()
+        with tempfile.TemporaryDirectory() as directory:
+            destination = Path(directory)/'image'
+            client.download('/internal/room-models/1/images/1',destination,1,'lease')
+            self.assertEqual(destination.read_bytes(), b'image bytes')
+        self.assertEqual(client.opener.calls, 3)
+
     def test_download_bearer_and_lease_headers(self):
         import threading
         from http.server import BaseHTTPRequestHandler, HTTPServer
