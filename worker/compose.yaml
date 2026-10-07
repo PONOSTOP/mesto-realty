@@ -20,7 +20,7 @@ services:
     volumes:
       - room-worker-cache:/home/roomworker/.cache
   room-model-vision:
-    image: ollama/ollama:latest
+    image: ollama/ollama@sha256:1bef639749741b375e9a1eb2c1346fb57ce52f5432de1f74846e44ccc18e1687
     restart: unless-stopped
     gpus: all
     environment:
