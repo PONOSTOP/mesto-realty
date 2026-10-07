@@ -69,13 +69,13 @@ class Client:
             raise ValueError('Only internal relative API paths are permitted')
         return urljoin(self.origin, path)
 
-    def request(self, path, data=None, content_type=None, extra_headers=None):
+    def request(self, path, data=None, content_type=None, extra_headers=None, timeout=30):
         headers = {'Authorization':'Bearer ' + self.token}
         headers.update(extra_headers or {})
         if content_type: headers['Content-Type'] = content_type
         req = Request(self.url(path), data=data, headers=headers)
         try:
-            return self.opener.open(req, timeout=30)
+            return self.opener.open(req, timeout=timeout)
         except HTTPError as error:
             status = error.code
             error.close()
@@ -105,7 +105,9 @@ class Client:
             parts.append((f'--{boundary}\r\nContent-Disposition: form-data; name="{key}"\r\n\r\n{value}\r\n').encode())
         parts.append((f'--{boundary}\r\nContent-Disposition: form-data; name="scene"; filename="scene.ply"\r\nContent-Type: application/octet-stream\r\n\r\n').encode())
         parts.extend([scene.read_bytes(), f'\r\n--{boundary}--\r\n'.encode()])
-        with self.request(path, b''.join(parts), 'multipart/form-data; boundary=' + boundary) as response:
+        # Large scenes can take minutes over a residential uplink. The job's
+        # hard watchdog and heartbeats still bound work and protect its lease.
+        with self.request(path, b''.join(parts), 'multipart/form-data; boundary=' + boundary, timeout=1800) as response:
             response.read(4096)
 
 def copy_bounded(source, destination, limit):

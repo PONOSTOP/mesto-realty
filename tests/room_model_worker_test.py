@@ -89,6 +89,23 @@ class WorkerTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             w.validate_job({**job,'images':[{'id':1,'url':'/internal/room-models/2/images/1'}]})
 
+    def test_scene_upload_allows_slow_transfer_without_extending_poll_timeout(self):
+        import io
+        observed = []
+        class Opener:
+            def open(self, request, timeout):
+                observed.append(timeout)
+                return io.BytesIO(b'{}')
+        client = w.Client('https://example.org', 'secret')
+        client.opener = Opener()
+        with tempfile.TemporaryDirectory() as directory:
+            scene = Path(directory)/'scene.ply'
+            scene.write_bytes(b'ply\nformat binary_little_endian 1.0\n')
+            client.complete('/internal/room-models/1/complete', {'revision': 1}, scene)
+        client.json('/internal/room-models/claim', {})
+        self.assertGreaterEqual(observed[0], 1800)
+        self.assertEqual(observed[1], 30)
+
     def test_stale_http_stops_work(self):
         from urllib.error import HTTPError
         class Opener:
