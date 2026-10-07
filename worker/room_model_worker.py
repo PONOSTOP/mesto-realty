@@ -228,8 +228,33 @@ class Lease:
         now = time.monotonic()
         if now >= self.deadline: raise TimeoutError('Task time limit reached')
         if now >= self.next_heartbeat:
-            self.client.json(self.path+'/heartbeat', self.body)
+            for attempt in range(3):
+                try:
+                    self.client.json(self.path+'/heartbeat', self.body)
+                    break
+                except (URLError, TimeoutError, ssl.SSLError, ConnectionError):
+                    if attempt == 2: raise
+                    time.sleep(attempt + 1)
             self.next_heartbeat = time.monotonic() + 60
+
+    def complete(self, camera, scene):
+        stopped = threading.Event()
+        failures = []
+        def renew():
+            try:
+                while not stopped.is_set():
+                    self.check()
+                    stopped.wait(1)
+            except Exception as error:
+                failures.append(error)
+        heartbeat = threading.Thread(target=renew, daemon=True)
+        heartbeat.start()
+        try:
+            self.client.complete(self.path+'/complete',{**self.body,'camera':json.dumps(camera,allow_nan=False)},scene)
+            if failures: raise failures[0]
+        finally:
+            stopped.set()
+            heartbeat.join(timeout=1)
 
     def run(self, command):
         self.check()
@@ -290,7 +315,7 @@ def process_job(client, job, timeout=3600):
             scenes = list((root/'export').glob('*.ply'))
             if len(scenes) != 1: raise ValueError('Missing unique exported scene')
             lease.check()
-            client.complete(lease.path+'/complete',{**lease.body,'camera':json.dumps(camera,allow_nan=False)},scenes[0])
+            lease.complete(camera,scenes[0])
     except StaleJob:
         return
     except Exception:

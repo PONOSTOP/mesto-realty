@@ -155,6 +155,19 @@ class WorkerTests(unittest.TestCase):
         finally:
             server.shutdown(); server.server_close(); thread.join()
 
+    def test_upload_renews_lease_while_waiting_for_server(self):
+        import threading
+        renewed = threading.Event()
+        class Client:
+            def json(self, path, body): renewed.set()
+            def complete(self, path, fields, scene):
+                self_path = path
+                if not renewed.wait(2): raise AssertionError('Upload must renew its lease')
+        job = {'propertyId':1,'revision':2,'leaseToken':'lease'}
+        lease = w.Lease(Client(),job,60)
+        self.assertTrue(hasattr(lease,'complete'), 'Completion must keep its lease alive')
+        lease.complete({'position':[0,0,1]},Path('scene.ply'))
+
     def test_stale_heartbeat_terminates_running_subprocess(self):
         class FakeClient:
             def __init__(self): self.calls = 0
