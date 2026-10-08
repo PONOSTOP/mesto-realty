@@ -10,10 +10,11 @@ import {
 export function createArchitecturalViewer(host, value) {
   const sceneData = parseArchitecturalScene(value);
   const world = new THREE.Scene();
-  world.background = new THREE.Color(0xeceee9);
+  world.background = new THREE.Color(0xf5f7f8);
   const model = buildArchitecturalGeometry(sceneData);
   world.add(model);
-  world.add(new THREE.HemisphereLight(0xffffff, 0xc2c6ba, 1.5));
+  world.add(new THREE.HemisphereLight(0xffffff, 0xe8edf0, 2.2));
+  world.add(new THREE.AmbientLight(0xffffff, 0.65));
   const sun = new THREE.DirectionalLight(0xfffaf2, 2.2);
   sun.position.set(
     -sceneData.width * 0.3,
@@ -37,7 +38,7 @@ export function createArchitecturalViewer(host, value) {
   world.add(sun, sun.target);
   const ground = new THREE.Mesh(
     new THREE.PlaneGeometry(sceneData.width * 4, sceneData.depth * 4),
-    new THREE.MeshStandardMaterial({ color: 0xeceee9, roughness: 1 }),
+    new THREE.MeshStandardMaterial({ color: 0xf4f5f6, roughness: 1 }),
   );
   ground.rotation.x = -Math.PI / 2;
   ground.position.set(sceneData.width / 2, -0.025, sceneData.depth / 2);
@@ -52,7 +53,7 @@ export function createArchitecturalViewer(host, value) {
   renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
   renderer.outputColorSpace = THREE.SRGBColorSpace;
   renderer.toneMapping = THREE.ACESFilmicToneMapping;
-  renderer.toneMappingExposure = 0.92;
+  renderer.toneMappingExposure = 1.15;
   renderer.shadowMap.enabled = true;
   renderer.shadowMap.type = THREE.PCFSoftShadowMap;
   host.append(renderer.domElement);
@@ -87,7 +88,7 @@ export function createArchitecturalViewer(host, value) {
     camera.position
       .copy(controls.target)
       .add(
-        new THREE.Vector3(0.65, 1, 0.85).normalize().multiplyScalar(distance),
+        new THREE.Vector3(0.28, 1.6, 0.4).normalize().multiplyScalar(distance),
       );
     controls.update();
   }
@@ -153,6 +154,8 @@ export function createArchitecturalViewer(host, value) {
     if (!["top", "inside"].includes(next)) throw new Error("Unknown view mode");
     if (next === "inside") findInteriorStart(sceneData);
     mode = next;
+    camera.fov = mode === "inside" ? 68 : 48;
+    camera.updateProjectionMatrix();
     host.dataset.mode = mode;
     controls.enabled = mode === "top";
     model.getObjectByName("ceilings").visible = mode === "inside";

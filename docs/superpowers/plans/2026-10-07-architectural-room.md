@@ -102,7 +102,9 @@ Files: modify `worker/room_model_worker.py`, `tests/room_model_worker_test.py`; 
 
 ## Task 5: Real service, visual review and deployment
 
-- [ ] Test live provider with a dimensioned test plan and room photos; confirm geometry follows plan, rather than merely showing a photo.
-- [ ] Review code and address Critical/Important findings; run required unit/API/browser/worker checks.
+Live quality correction: full scene generation copied example coordinates and missed openings. A local 8b JSON grounding probe correctly located plan symbols. Implement a bounded normalizer that converts grounded image coordinates to measured geometry, requires a closed exterior cycle, and confirms wall positions/opening gaps against the actual raster. Never substitute a generic rectangle for unreadable topology. Test metric calibration, duplicate observations, missing exterior, malicious coordinates and invented openings before integrating the local adapter. Keep strict server scene validation and leased completion.
+
+- [x] Test live provider with a dimensioned test plan and room photos; confirm geometry follows plan, rather than merely showing a photo.
+- [x] Review code and address Critical/Important findings; run required unit/API/browser/worker checks.
 - [ ] Publish a clearly labeled architectural demonstration. Inspect desktop/mobile screenshots, overhead/interior modes, rotation and zoom; verify no CSP/JS errors.
 - [ ] Update Dockhost, restart local worker, verify photos/plan/model survive site deployment. Record actual evidence and remaining limits; provide working object link.

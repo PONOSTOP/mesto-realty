@@ -12,7 +12,7 @@ services:
       ROOM_MODEL_WORKER_TOKEN: ${ROOM_MODEL_WORKER_TOKEN:?Set the private worker token}
       ROOM_MODEL_TASK_TIMEOUT_SECONDS: ${ROOM_MODEL_TASK_TIMEOUT_SECONDS:-3600}
       ROOM_MODEL_LOCAL_VISION_URL: ${ROOM_MODEL_LOCAL_VISION_URL:-http://room-model-vision:11434}
-      ROOM_MODEL_LOCAL_VISION_MODEL: ${ROOM_MODEL_LOCAL_VISION_MODEL:-qwen3-vl:4b-instruct}
+      ROOM_MODEL_LOCAL_VISION_MODEL: ${ROOM_MODEL_LOCAL_VISION_MODEL:-qwen3-vl:8b-instruct}
     security_opt:
       - no-new-privileges:true
     cap_drop:

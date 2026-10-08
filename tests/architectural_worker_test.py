@@ -45,13 +45,15 @@ class ArchitectureWorkerTests(unittest.TestCase):
             def log_message(self,*args): pass
         server=HTTPServer(('127.0.0.1',0),Handler); thread=threading.Thread(target=server.serve_forever,daemon=True);thread.start()
         try:
-            scene=w.LocalVision(f'http://127.0.0.1:{server.server_port}','qwen2.5vl:3b').analyze(self.job(),['plan'],appearance={'furnitureKinds':['sofa']})
+            with patch('architectural_grounding.grounded_scene',return_value={'walls':[]}) as convert:
+                scene=w.LocalVision(f'http://127.0.0.1:{server.server_port}','qwen3-vl:8b-instruct').analyze(self.job(),['plan'],appearance={'furnitureKinds':['sofa']})
+                convert.assert_called_once_with({'walls':[]},self.job()['dimensions'],'plan')
             self.assertEqual(scene,{'walls':[]});self.assertNotIn('Authorization',captured['headers'])
-            body=captured['body'];self.assertEqual(body['format'],self.job()['sceneSchema'])
+            body=captured['body'];self.assertEqual(body['format'],'json')
             self.assertFalse(body['stream']);self.assertEqual(body['keep_alive'],'5m');self.assertFalse(body['think'])
             self.assertEqual(body['options'],{'temperature':0,'num_ctx':8192,'num_predict':6000})
-            self.assertEqual(body['messages'][1]['images'],['plan'])
-            self.assertIn('sofa',body['messages'][1]['content'])
+            self.assertEqual(body['messages'][0]['images'],['plan'])
+            self.assertIn('sofa',body['messages'][0]['content'])
             self.assertEqual(captured['path'],'/api/chat')
         finally: server.shutdown();server.server_close();thread.join()
 
@@ -79,7 +81,7 @@ class ArchitectureWorkerTests(unittest.TestCase):
         with patch.dict(os.environ,{'ROOM_MODEL_LOCAL_VISION_URL':'http://room-model-vision:11434'}),patch.object(w,'LocalVision',Vision):
             os.environ.pop('ROOM_MODEL_LOCAL_VISION_MODEL',None)
             w.process_architectural_job(site,self.job())
-        self.assertEqual(models,['qwen3-vl:4b-instruct'])
+        self.assertEqual(models,['qwen3-vl:8b-instruct'])
 
     def test_photo_appearance_is_classification_only_and_deduplicated(self):
         self.assertTrue(hasattr(w.LocalVision,'appearance'),'Photo appearance stage must exist')
@@ -90,7 +92,7 @@ class ArchitectureWorkerTests(unittest.TestCase):
                 return io.BytesIO(json.dumps({'message':{'content':json.dumps({'furnitureKinds':['sofa','shoe','sofa','table']})},'done':True}).encode())
         vision=w.LocalVision('http://localhost:11434','model');vision.opener=Opener()
         self.assertEqual(vision.appearance(['photo1','photo2']),{'furnitureKinds':['sofa','table']})
-        self.assertEqual(captured['options'],{'temperature':0,'num_ctx':4096,'num_predict':128})
+        self.assertEqual(captured['options'],{'temperature':0,'num_ctx':8192,'num_predict':128})
         self.assertFalse(captured['think']);self.assertEqual(captured['keep_alive'],'5m')
         self.assertEqual(captured['messages'][1]['images'],['photo1','photo2'])
         schema=captured['format'];self.assertEqual(list(schema['properties']),['furnitureKinds'])
