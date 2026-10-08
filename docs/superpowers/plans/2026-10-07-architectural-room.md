@@ -67,38 +67,38 @@ POST /internal/architectural-models/:id/fail {revision,leaseToken,code}
 
 Files: create `public/js/architectural-schema.js`, `server/architectural-analysis.js`, `tests/architectural-schema.test.js`, `tests/architectural-analysis.test.js`.
 
-- [ ] Write failing tests for valid dimensioned plan, invalid wall/opening/furniture/unknown-key inputs, nonfinite/oversized payloads and provider parsing/errors.
-- [ ] Run `node --test tests/architectural-schema.test.js tests/architectural-analysis.test.js`; confirm missing implementations fail.
-- [ ] Implement `parseArchitecturalScene` and `analyzeFloorPlan({plan,photos,dimensions},{apiKey,model,baseUrl,fetchImpl})`. Encode bounded image data, use existing chat-completions API, parse JSON, validate against dimensions and return only canonical scene. Model/key default from server config at route call, not browser.
-- [ ] Run the same tests to pass; commit `feat: validate and analyze architectural floor plans`.
+- [x] Write failing tests for valid dimensioned plan, invalid wall/opening/furniture/unknown-key inputs, nonfinite/oversized payloads and provider parsing/errors.
+- [x] Run `node --test tests/architectural-schema.test.js tests/architectural-analysis.test.js`; confirm missing implementations fail.
+- [x] Implement `parseArchitecturalScene` and `analyzeFloorPlan({plan,photos,dimensions},{apiKey,model,baseUrl,fetchImpl})`. Encode bounded image data, use existing chat-completions API, parse JSON, validate against dimensions and return only canonical scene. Model/key default from server config at route call, not browser.
+- [x] Run the same tests to pass; commit `feat: validate and analyze architectural floor plans`.
 
 ## Task 2: Persistent inputs, queue and API
 
 Files: create `migrations/004_architectural_models.sql`, `server/architectural-models.js`; modify `server/app.js`, `server/room-models.js`, `server/properties.js`; create `tests/architectural-api.test.js`.
 
-- [ ] Write failing API cases using existing PostgreSQL test setup: ownership, auth/CSRF, dimensions, image plan upload, automatic revision changes, stale lease, ready artifact and deletion.
-- [ ] Implement `queueArchitecturalModel(client,id)` plus public/worker routers and protected artifact functions. Snapshot image IDs, plan filename and dimensions in each revision; transactionally invalidate prior leases. Persist files under upload directory; image decoding and output sizes bounded.
-- [ ] Wire photo/category mutation to queue, and property removal to artifact cleanup. Integrate new routes in app before/after CSRF as specified.
-- [ ] Run `node --test --test-concurrency=1 tests/architectural-api.test.js` and existing API checks; commit `feat: queue architectural models from plan inputs`.
+- [x] Write failing API cases using existing PostgreSQL test setup: ownership, auth/CSRF, dimensions, image plan upload, automatic revision changes, stale lease, ready artifact and deletion.
+- [x] Implement `queueArchitecturalModel(client,id)` plus public/worker routers and protected artifact functions. Snapshot image IDs, plan filename and dimensions in each revision; transactionally invalidate prior leases. Persist files under upload directory; image decoding and output sizes bounded.
+- [x] Wire photo/category mutation to queue, and property removal to artifact cleanup. Integrate new routes in app before/after CSRF as specified.
+- [x] Run `node --test --test-concurrency=1 tests/architectural-api.test.js` and existing API checks; commit `feat: queue architectural models from plan inputs`.
 
 ## Task 3: Architectural mesh viewer and owner form
 
 Files: create `public/js/architectural-geometry.js`, `public/js/architectural-viewer-source.js`, `public/js/architectural-model.js`, `public/js/architectural-inputs.js`, `scripts/build-architectural-viewer.js`; modify `public/js/room-model.js`, `public/js/forms.js`, `public/styles.css`, `package.json`; create geometry/browser tests.
 
-- [ ] Test known plan mesh dimensions, actual wall opening subtraction, furniture shapes, overhead/interior camera modes, mobile controls, disposal and strict CSP.
-- [ ] Build floors from polygons, walls around opening rectangles, window frames/glass, doorway trim, columns and recognizable simplified furniture. Use white materials, soft illumination, neutral ground; no photo point-cloud look.
-- [ ] Bundle Three.js and OrbitControls locally. Mesh viewer exposes `createArchitecturalViewer(host,scene)` with `setMode('top'|'inside')`, `reset()`, `dispose()`. Fit overhead camera to dimensions; select interior starting point on a floor, never in a wall; ceiling hidden overhead.
-- [ ] `mountArchitecturalModel` polls new GET, lazy loads bundle on action and exposes top/inside/reset/fullscreen controls. Existing exported `mountRoomModel` delegates to new mount while `uploadPhotoBatches` remains intact.
-- [ ] `mountArchitecturalInputs(form,propertyId)` returns `{save(id),dispose()}`. Owner inputs are separate plan upload and width/depth/height; save after successful photo batches, preserving successful writes on retry. Existing ceiling height may seed the height field. Hide all architectural guidance for land.
-- [ ] Run geometry/browser checks and commit `feat: display architectural plans and interior views`.
+- [x] Test known plan mesh dimensions, actual wall opening subtraction, furniture shapes, overhead/interior camera modes, mobile controls, disposal and strict CSP.
+- [x] Build floors from polygons, walls around opening rectangles, window frames/glass, doorway trim, columns and recognizable simplified furniture. Use white materials, soft illumination, neutral ground; no photo point-cloud look.
+- [x] Bundle Three.js and OrbitControls locally. Mesh viewer exposes `createArchitecturalViewer(host,scene)` with `setMode('top'|'inside')`, `reset()`, `dispose()`. Fit overhead camera to dimensions; select interior starting point on a floor, never in a wall; ceiling hidden overhead.
+- [x] `mountArchitecturalModel` polls new GET, lazy loads bundle on action and exposes top/inside/reset/fullscreen controls. Existing exported `mountRoomModel` delegates to new mount while `uploadPhotoBatches` remains intact.
+- [x] `mountArchitecturalInputs(form,propertyId)` returns `{save(id),dispose()}`. Owner inputs are separate plan upload and width/depth/height; save after successful photo batches, preserving successful writes on retry. Existing ceiling height may seed the height field. Hide all architectural guidance for land.
+- [x] Run geometry/browser checks and commit `feat: display architectural plans and interior views`.
 
 ## Task 4: Local worker orchestration
 
 Files: modify `worker/room_model_worker.py`, `tests/room_model_worker_test.py`; modify setup/verification docs.
 
-- [ ] Test architecture claim/analysis endpoints, Bearer restrictions, lease renewals during slow analyze, stale 409 handling and safe failure categories.
-- [ ] Allow only the two known internal URL prefixes. Main loop claims architecture jobs, maintains heartbeat during analysis with bounded timeout and one-hour watchdog. It no longer starts legacy photo reconstruction automatically; old functions remain for rollback/testing.
-- [ ] Run Python checks, rebuild Docker and verify authenticated production call after deployment. Commit `feat: run automatic architectural analysis jobs`.
+- [x] Test architecture claim/analysis endpoints, Bearer restrictions, lease renewals during slow analyze, stale 409 handling and safe failure categories.
+- [x] Allow only the two known internal URL prefixes. Main loop claims architecture jobs, maintains heartbeat during analysis with bounded timeout and one-hour watchdog. It no longer starts legacy photo reconstruction automatically; old functions remain for rollback/testing.
+- [x] Run Python checks, rebuild Docker and verify authenticated production call after deployment. Commit `feat: run automatic architectural analysis jobs`.
 
 ## Task 5: Real service, visual review and deployment
 
