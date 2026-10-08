@@ -106,5 +106,5 @@ Live quality correction: full scene generation copied example coordinates and mi
 
 - [x] Test live provider with a dimensioned test plan and room photos; confirm geometry follows plan, rather than merely showing a photo.
 - [x] Review code and address Critical/Important findings; run required unit/API/browser/worker checks.
-- [ ] Publish a clearly labeled architectural demonstration. Inspect desktop/mobile screenshots, overhead/interior modes, rotation and zoom; verify no CSP/JS errors.
-- [ ] Update Dockhost, restart local worker, verify photos/plan/model survive site deployment. Record actual evidence and remaining limits; provide working object link.
+- [x] Publish a clearly labeled architectural demonstration. Inspect desktop/mobile screenshots, overhead/interior modes, rotation and zoom; verify no CSP/JS errors.
+- [x] Update Dockhost, restart local worker, verify photos/plan/model survive site deployment. Record actual evidence and remaining limits; provide working object link.
