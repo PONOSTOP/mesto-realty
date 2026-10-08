@@ -13,8 +13,8 @@ export function createArchitecturalViewer(host, value) {
   world.background = new THREE.Color(0xf5f7f8);
   const model = buildArchitecturalGeometry(sceneData);
   world.add(model);
-  world.add(new THREE.HemisphereLight(0xffffff, 0xe8edf0, 2.2));
-  world.add(new THREE.AmbientLight(0xffffff, 0.65));
+  world.add(new THREE.HemisphereLight(0xffffff, 0xd4dce0, 1.8));
+  world.add(new THREE.AmbientLight(0xffffff, 0.25));
   const sun = new THREE.DirectionalLight(0xfffaf2, 2.2);
   sun.position.set(
     -sceneData.width * 0.3,
@@ -53,7 +53,7 @@ export function createArchitecturalViewer(host, value) {
   renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
   renderer.outputColorSpace = THREE.SRGBColorSpace;
   renderer.toneMapping = THREE.ACESFilmicToneMapping;
-  renderer.toneMappingExposure = 1.15;
+  renderer.toneMappingExposure = 1.05;
   renderer.shadowMap.enabled = true;
   renderer.shadowMap.type = THREE.PCFSoftShadowMap;
   host.append(renderer.domElement);
